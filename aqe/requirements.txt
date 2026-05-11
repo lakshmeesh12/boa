@@ -33,3 +33,15 @@ python-json-logger==3.2.1
 
 # Reporting
 jinja2==3.1.5
+
+# Vulnerability scanning (subprocess; required for VulnScanner runner)
+# Note: semgrep is intentionally omitted - it does not support Windows natively
+# (https://github.com/semgrep/semgrep/issues/1330). pip-audit + bandit cover
+# SCA + Python SAST which is enough for the demo. The vuln_scanner gracefully
+# emits a "tool missing" result if semgrep is not on PATH.
+pip-audit==2.7.3
+bandit==1.7.10
+
+# Unit-test generation runner
+pytest==8.3.4
+pytest-json-report==1.5.0

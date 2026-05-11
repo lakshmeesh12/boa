@@ -48,6 +48,35 @@ class TestType(str, Enum):
     ALL         = "All"
 
 
+class TestCategory(str, Enum):
+    """Broader test category dimension (orthogonal to TestType).
+
+    A single TestCase has one category; the report groups by both module and category.
+    """
+    UNIT          = "Unit"
+    FUNCTIONAL    = "Functional"
+    API           = "API"
+    INTEGRATION   = "Integration"
+    HEADER        = "Header"
+    SECURITY      = "Security"
+    VULNERABILITY = "Vulnerability"
+    PERFORMANCE   = "Performance"
+    UI            = "UI"
+
+
+class PlanMode(str, Enum):
+    SMART     = "smart"       # impacted existing tests + new tests for the diff
+    FULL      = "full"        # all existing tests + new tests
+    NEW_ONLY  = "new_only"    # only new tests Claude generated for this diff
+
+
+class RiskLevel(str, Enum):
+    LOW       = "low"
+    MEDIUM    = "medium"
+    HIGH      = "high"
+    CRITICAL  = "critical"
+
+
 class ScriptType(str, Enum):
     BASH     = "bash"
     PYTHON   = "python"
@@ -62,6 +91,7 @@ class TestCase(BaseModel):
     description: str
     module: BankingModule
     test_type: TestType = TestType.FUNCTIONAL
+    category: TestCategory = TestCategory.API
     method: str = "GET"
     endpoint: str = ""
     payload: dict | None = None
@@ -70,12 +100,15 @@ class TestCase(BaseModel):
     # For script-based tests
     script_path: str | None = None
     script_type: ScriptType | None = None
+    # For change-driven tests — links back to the diff that prompted this case
+    triggered_by_files: list[str] = Field(default_factory=list)
 
 
 class TestResult(BaseModel):
     test_id: str
     test_name: str
     module: str
+    category: str = "API"
     status: TestStatus
     duration_ms: float
     request_summary: str = ""
@@ -83,6 +116,7 @@ class TestResult(BaseModel):
     error: str | None = None
     rca: str | None = None        # Root cause analysis from Intelligence Agent
     trace_id: str | None = None
+    severity: str | None = None   # for vulnerability findings: critical / high / medium / low
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
@@ -121,6 +155,68 @@ class UploadedScript(BaseModel):
     uploaded_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
+# ─── Change Detection ────────────────────────────────────────────────────
+class ChangedFile(BaseModel):
+    path: str                        # repo-relative, e.g. "backend/routers/credit_card_services.py"
+    status: str                      # "added" | "modified" | "deleted" | "renamed"
+    language: str = "unknown"        # "python" | "javascript" | "html" | "yaml" | ...
+    additions: int = 0
+    deletions: int = 0
+    diff: str = ""                   # unified-diff text for this file (capped in size)
+
+
+class ChangeSet(BaseModel):
+    baseline_sha: str
+    baseline_tag: str = "aqe-demo-baseline"
+    head_sha: str
+    branch: str = "main"
+    files: list[ChangedFile] = Field(default_factory=list)
+    total_additions: int = 0
+    total_deletions: int = 0
+    detected_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+    @property
+    def is_empty(self) -> bool:
+        return len(self.files) == 0
+
+    @property
+    def file_count(self) -> int:
+        return len(self.files)
+
+
+class SuggestedTest(BaseModel):
+    name: str
+    description: str
+    category: TestCategory
+    module: BankingModule
+    rationale: str = ""              # why Claude wants this test
+    # Optional execution hints — populated for API/Functional/Security/Integration categories.
+    # Unit / Vulnerability / Performance / Header / UI categories use runner-defined logic
+    # and may leave these blank.
+    method: str = "GET"
+    endpoint: str = ""
+    payload: dict | None = None
+    expected_status: int = 200
+    ui_instruction: str = ""          # natural-language scenario for UI category
+
+
+class ChangeAnalysis(BaseModel):
+    summary: str = ""                                 # 2-3 sentence overview
+    modules_affected: list[str] = Field(default_factory=list)
+    risk_level: RiskLevel = RiskLevel.LOW
+    suggested_test_categories: list[TestCategory] = Field(default_factory=list)
+    suggested_new_tests: list[SuggestedTest] = Field(default_factory=list)
+    detected_issues: list[str] = Field(default_factory=list)   # red flags
+    github_commit_url: str | None = None
+    generated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class ChangeContext(BaseModel):
+    """Bundled ChangeSet + ChangeAnalysis — passed to planner when a session is change-driven."""
+    change_set: ChangeSet
+    analysis: ChangeAnalysis
+
+
 # ─── Session ─────────────────────────────────────────────────────────────
 class Session(BaseModel):
     model_config = ConfigDict(use_enum_values=True)
@@ -130,6 +226,8 @@ class Session(BaseModel):
     state: SessionState = SessionState.IDLE
     modules: list[BankingModule] = Field(default_factory=list)
     test_types: list[TestType] = Field(default_factory=list)
+    plan_mode: PlanMode = PlanMode.FULL
+    change_context: ChangeContext | None = None
     plan: Plan | None = None
     results: list[TestResult] = Field(default_factory=list)
     uploaded_scripts: list[UploadedScript] = Field(default_factory=list)
@@ -175,6 +273,8 @@ class CreateSessionRequest(BaseModel):
     name: str = Field(default="", max_length=100)
     modules: list[BankingModule]
     test_types: list[TestType] = Field(default_factory=lambda: [TestType.ALL])
+    plan_mode: PlanMode = PlanMode.FULL
+    use_change_context: bool = False  # if True, planner picks up current ChangeSet from git_watcher
 
 
 class ApproveRequest(BaseModel):

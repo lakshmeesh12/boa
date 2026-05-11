@@ -6,7 +6,7 @@ from typing import Any
 
 import anthropic
 
-from core.event_bus import emit_log, emit_test_result
+from core.event_bus import emit_log, emit_test_result, emit_ui_action_snapshot, emit_ui_frame
 from core.logging_config import get_logger
 from core.settings import settings
 from models.schemas import TestResult, TestStatus
@@ -80,17 +80,25 @@ class UIAgent:
     async def _emit(self, message: str, level: str = "INFO") -> None:
         await emit_log(self.session_id, message, level=level, agent=self.name)
 
+    async def _frame_to_event_bus(self, frame_b64: str) -> None:
+        """Forward CDP screencast frames to the session WebSocket."""
+        await emit_ui_frame(self.session_id, frame_b64)
+
     async def run_all_scenarios(self) -> list[TestResult]:
-        """Run all 6 UI scenarios using Claude Computer Use."""
+        """Run all 6 UI scenarios using Claude Computer Use, streaming live frames."""
         await pr.start_browser()
         await pr.navigate(settings.target_ui_url)
         await pr.login_if_required(settings.target_ui_username, settings.target_ui_password)
+        # Start CDP screencast — frames flow to the live canvas in the session tab.
+        await pr.start_screencast(self._frame_to_event_bus)
         results = []
-        for scenario in _UI_SCENARIOS:
-            result = await self._run_scenario(scenario["name"], scenario["instruction"])
-            results.append(result)
-            await emit_test_result(self.session_id, result.model_dump(mode="json"))
-        await pr.stop_browser()
+        try:
+            for scenario in _UI_SCENARIOS:
+                result = await self._run_scenario(scenario["name"], scenario["instruction"])
+                results.append(result)
+                await emit_test_result(self.session_id, result.model_dump(mode="json"))
+        finally:
+            await pr.stop_browser()  # also stops screencast
         return results
 
     async def _run_scenario(self, name: str, instruction: str) -> TestResult:
@@ -170,10 +178,16 @@ class UIAgent:
                         )
                         break  # stop processing this turn
                     # Computer action
-                    await self._emit(f"[UIAgent] action: {block.name}({str(block.input)[:60]})")
+                    action_label = f"{block.name}({str(block.input)[:60]})"
+                    await self._emit(f"[UIAgent] action: {action_label}")
                     action = dict(block.input)
                     action["type"] = action.pop("action", action.get("type", "screenshot"))
                     new_screenshot = await pr.execute_action(action)
+                    # Push a thumbnail to the action history strip in the session tab
+                    try:
+                        await emit_ui_action_snapshot(self.session_id, action_label, new_screenshot)
+                    except Exception:
+                        pass
                     tool_results.append({
                         "type": "tool_result",
                         "tool_use_id": block.id,

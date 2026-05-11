@@ -20,6 +20,9 @@ log = get_logger("PlaywrightRunner")
 _page = None
 _browser = None
 _playwright = None
+_cdp_session = None
+_screencast_on_frame = None  # callback(frame_b64: str) -> awaitable
+_screencast_task = None
 
 
 async def start_browser() -> None:
@@ -35,6 +38,11 @@ async def start_browser() -> None:
 
 async def stop_browser() -> None:
     global _page, _browser, _playwright
+    # Stop screencast first so frame events don't fire after page close
+    try:
+        await stop_screencast()
+    except Exception:
+        pass
     if _page:
         await _page.close()
         _page = None
@@ -130,6 +138,79 @@ async def login_if_required(username: str, password: str) -> None:
     await _page.click(".login-btn")
     await _page.wait_for_load_state("networkidle", timeout=10000)
     log.info("playwright.login_completed", context={"landed_at": _page.url})
+
+
+async def start_screencast(on_frame) -> None:
+    """Begin a CDP Page.startScreencast stream on the current page.
+
+    `on_frame` is an async callable taking a single base64 JPEG string.
+    Frames arrive at ~Chromium's chosen rate; we ack each one so Chrome keeps sending.
+    Safe to call multiple times — second call is a no-op if a screencast is already running.
+    """
+    global _cdp_session, _screencast_on_frame
+    await start_browser()
+    assert _page
+    if _cdp_session is not None:
+        log.info("playwright.screencast_already_running")
+        return
+
+    _screencast_on_frame = on_frame
+    try:
+        _cdp_session = await _page.context.new_cdp_session(_page)
+    except Exception as exc:
+        log.warning("playwright.screencast_cdp_failed", context={"error": str(exc)})
+        _cdp_session = None
+        _screencast_on_frame = None
+        return
+
+    async def _on_frame_event(params: dict) -> None:
+        frame_b64 = params.get("data", "")
+        session_id = params.get("sessionId")
+        # Push the frame to the consumer (e.g., event bus)
+        if _screencast_on_frame and frame_b64:
+            try:
+                await _screencast_on_frame(frame_b64)
+            except Exception as exc:
+                log.warning("playwright.screencast_callback_failed", context={"error": str(exc)})
+        # Ack so Chrome keeps streaming
+        if _cdp_session and session_id is not None:
+            try:
+                await _cdp_session.send("Page.screencastFrameAck", {"sessionId": session_id})
+            except Exception:
+                pass
+
+    # CDP events deliver sync callbacks; wrap to fire-and-forget asyncio tasks
+    def _frame_listener(params):
+        asyncio.create_task(_on_frame_event(params))
+
+    _cdp_session.on("Page.screencastFrame", _frame_listener)
+
+    await _cdp_session.send("Page.startScreencast", {
+        "format": "jpeg",
+        "quality": 60,
+        "maxWidth": 1024,
+        "maxHeight": 640,
+        "everyNthFrame": 3,
+    })
+    log.info("playwright.screencast_started")
+
+
+async def stop_screencast() -> None:
+    """Stop the CDP screencast (if running). Safe to call when not started."""
+    global _cdp_session, _screencast_on_frame
+    if _cdp_session is None:
+        return
+    try:
+        await _cdp_session.send("Page.stopScreencast")
+    except Exception as exc:
+        log.warning("playwright.screencast_stop_failed", context={"error": str(exc)})
+    try:
+        await _cdp_session.detach()
+    except Exception:
+        pass
+    _cdp_session = None
+    _screencast_on_frame = None
+    log.info("playwright.screencast_stopped")
 
 
 async def get_page_url() -> str:

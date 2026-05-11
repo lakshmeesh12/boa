@@ -51,12 +51,13 @@ app.add_middleware(
 )
 
 # ─── API Routers ──────────────────────────────────────────────────────────
-from routers import sessions, reports, graphrag, stream, scripts  # noqa: E402
+from routers import sessions, reports, graphrag, stream, scripts, changes  # noqa: E402
 
 app.include_router(sessions.router)
 app.include_router(reports.router)
 app.include_router(graphrag.router)
 app.include_router(stream.router)
+app.include_router(changes.router)
 
 # Scripts router is nested under sessions — register separately
 from fastapi import APIRouter  # noqa: E402

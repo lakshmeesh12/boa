@@ -63,6 +63,11 @@ def save_json(report: Report) -> Path:
     return path
 
 
+def _safe_attr(obj, name: str, default: str = "") -> str:
+    val = getattr(obj, name, default)
+    return val if val else default
+
+
 def save_html(report: Report) -> Path:
     path = settings.reports_dir / f"{report.id}.html"
     pct = round((report.passed / report.total * 100) if report.total else 0, 1)
@@ -72,10 +77,14 @@ def save_html(report: Report) -> Path:
     for r in report.results:
         rca_cell = f'<div style="color:#6b7280;font-size:11px;margin-top:4px;">{r.rca}</div>' if r.rca else ""
         err_cell = f'<div style="color:#ef4444;font-size:11px;">{r.error}</div>' if r.error else ""
+        cat = _safe_attr(r, "category", "API")
+        sev = _safe_attr(r, "severity", "")
+        sev_cell = f'<div style="color:#b45309;font-size:10px;text-transform:uppercase;">{sev}</div>' if sev else ""
         rows += f"""
         <tr>
-          <td style="padding:10px 12px;border-bottom:1px solid #f1f5f9;">{r.test_name}</td>
+          <td style="padding:10px 12px;border-bottom:1px solid #f1f5f9;">{r.test_name}{sev_cell}</td>
           <td style="padding:10px 12px;border-bottom:1px solid #f1f5f9;">{r.module}</td>
+          <td style="padding:10px 12px;border-bottom:1px solid #f1f5f9;font-size:11px;color:#475569;">{cat}</td>
           <td style="padding:10px 12px;border-bottom:1px solid #f1f5f9;">{_status_badge(r.status)}</td>
           <td style="padding:10px 12px;border-bottom:1px solid #f1f5f9;font-family:monospace;">{r.duration_ms}ms</td>
           <td style="padding:10px 12px;border-bottom:1px solid #f1f5f9;font-size:12px;color:#475569;">{r.request_summary}</td>
@@ -93,6 +102,25 @@ def save_html(report: Report) -> Path:
           <td style="padding:8px 12px;">{len(m_results)}</td>
           <td style="padding:8px 12px;color:#22c55e;font-weight:600;">{m_pass}</td>
           <td style="padding:8px 12px;color:#ef4444;font-weight:600;">{m_fail}</td>
+        </tr>"""
+
+    # Category breakdown
+    category_breakdown = ""
+    cats = sorted({_safe_attr(r, "category", "API") for r in report.results})
+    for cat in cats:
+        c_results = [r for r in report.results if _safe_attr(r, "category", "API") == cat]
+        c_pass = sum(1 for r in c_results if r.status == TestStatus.PASSED)
+        c_fail = sum(1 for r in c_results if r.status == TestStatus.FAILED)
+        c_skip = sum(1 for r in c_results if r.status == TestStatus.SKIPPED)
+        c_err  = sum(1 for r in c_results if r.status == TestStatus.ERROR)
+        category_breakdown += f"""
+        <tr>
+          <td style="padding:8px 12px;font-weight:600;">{cat}</td>
+          <td style="padding:8px 12px;">{len(c_results)}</td>
+          <td style="padding:8px 12px;color:#22c55e;font-weight:600;">{c_pass}</td>
+          <td style="padding:8px 12px;color:#ef4444;font-weight:600;">{c_fail}</td>
+          <td style="padding:8px 12px;color:#f97316;font-weight:600;">{c_err}</td>
+          <td style="padding:8px 12px;color:#94a3b8;">{c_skip}</td>
         </tr>"""
 
     html = f"""<!DOCTYPE html>
@@ -131,13 +159,17 @@ def save_html(report: Report) -> Path:
   </div>
 </div>
 
-<h2>Module Breakdown</h2>
+<h2>Category Breakdown</h2>
+<table><thead><tr><th>Category</th><th>Total</th><th>Passed</th><th>Failed</th><th>Errors</th><th>Skipped</th></tr></thead>
+<tbody>{category_breakdown}</tbody></table>
+
+<h2 style="margin-top:24px;">Module Breakdown</h2>
 <table><thead><tr><th>Module</th><th>Total</th><th>Passed</th><th>Failed</th></tr></thead>
 <tbody>{module_breakdown}</tbody></table>
 
 <h2 style="margin-top:32px;">Test Results</h2>
 <table>
-  <thead><tr><th>Test Name</th><th>Module</th><th>Status</th><th>Duration</th><th>Request</th><th>Detail / RCA</th></tr></thead>
+  <thead><tr><th>Test Name</th><th>Module</th><th>Category</th><th>Status</th><th>Duration</th><th>Request</th><th>Detail / RCA</th></tr></thead>
   <tbody>{rows}</tbody>
 </table>
 <p style="color:#94a3b8;font-size:11px;margin-top:32px;text-align:center;">

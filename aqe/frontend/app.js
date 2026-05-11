@@ -29,7 +29,7 @@ function pillHtml(s,sm){
 }
 
 // ── View routing ─────────────────────────────────────────────────
-const VIEWS=["dashboard","run-tests","reports","graphrag","settings"];
+const VIEWS=["dashboard","changes","run-tests","reports","graphrag","settings"];
 let _activeView=null;
 
 function navigateTo(view){
@@ -41,6 +41,7 @@ function navigateTo(view){
     if(btn) btn.classList.toggle("active",v===view);
   });
   if(view==="dashboard") loadDashboard();
+  if(view==="changes")   loadChanges(false);
   if(view==="run-tests") loadIdleSessions();
   if(view==="reports")   loadReports();
   if(view==="graphrag")  {loadGraph();loadQStatus();}
@@ -148,7 +149,186 @@ window.loadDashboard = async function(){
     const g=await apiFetch("/graphrag/status");
     setText("k-vectors",g.qdrant?.points_count??0);
   }catch(_){}
+
+  // Change-detection banner
+  loadChangesStatus();
 };
+
+// ══════════════════════════════════════════════════════════════════
+// CHANGE DETECTION
+// ══════════════════════════════════════════════════════════════════
+async function loadChangesStatus(){
+  try{
+    const s=await apiFetch("/changes/status");
+    const banner=$("dash-changes-banner");
+    const badge=$("nav-changes-badge");
+    if(s.is_empty){
+      if(banner) banner.style.display="none";
+      if(badge){badge.style.display="none"; badge.textContent="0";}
+      return;
+    }
+    if(banner) banner.style.display="";
+    if(badge){badge.style.display=""; badge.textContent=s.file_count;}
+    setText("dash-changes-title",
+      `${s.file_count} file${s.file_count===1?"":"s"} changed since baseline`);
+    setText("dash-changes-subtitle",
+      `+${s.total_additions}/-${s.total_deletions} lines on branch ${s.branch} (HEAD ${s.head_sha.slice(0,7)})`);
+  }catch(_){
+    // change-detection requires git repo — silently hide banner if unavailable
+    const banner=$("dash-changes-banner");
+    if(banner) banner.style.display="none";
+  }
+}
+
+const _RISK_PILL={low:"p-slate",medium:"p-amber",high:"p-red",critical:"p-red"};
+
+async function loadChanges(forceRefresh){
+  const empty=$("changes-empty"), analysis=$("changes-analysis"),
+        suggested=$("changes-suggested-wrap"), filesWrap=$("changes-files-wrap"),
+        loading=$("changes-loading");
+  [empty, analysis, suggested, filesWrap].forEach(el=>{if(el) el.style.display="none";});
+  if(loading) loading.style.display="";
+
+  let ctx;
+  try{
+    ctx = forceRefresh
+      ? await apiFetch("/changes/refresh",{method:"POST"})
+      : await apiFetch("/changes/since-baseline");
+  }catch(e){
+    if(loading) loading.style.display="none";
+    if(empty){
+      empty.style.display="";
+      empty.innerHTML=`<div style="color:#dc2626;font-weight:700;font-size:14px;">Change detection unavailable</div>
+        <div style="font-size:12px;color:#64748b;margin-top:6px;">${e.message||"unknown error"}</div>
+        <div style="font-size:11px;color:#94a3b8;margin-top:8px;">Did you run <span class="mono">demo_scripts\\setup_demo_repo.ps1</span>?</div>`;
+    }
+    return;
+  }
+  if(loading) loading.style.display="none";
+
+  const cs=ctx.change_set, a=ctx.analysis;
+  if(cs.is_empty || cs.file_count===0){
+    if(empty){
+      empty.style.display="";
+      setText("changes-empty-sha", (cs.baseline_sha||"").slice(0,12));
+    }
+    return;
+  }
+
+  // Analysis card
+  if(analysis){
+    analysis.style.display="";
+    const riskPill=$("changes-risk");
+    if(riskPill){
+      riskPill.className="pill "+(_RISK_PILL[a.risk_level]||"p-slate");
+      riskPill.textContent=(a.risk_level||"low").toUpperCase()+" RISK";
+    }
+    setText("changes-summary", a.summary || "(no summary)");
+    const mods=$("changes-modules");
+    if(mods){
+      mods.innerHTML=(a.modules_affected||[]).map(m=>
+        `<span class="pill p-blue" style="font-size:11px;">${m}</span>`).join("")
+        || `<span style="font-size:12px;color:#94a3b8;">No specific modules identified</span>`;
+    }
+    const issuesWrap=$("changes-issues-wrap"), issuesUl=$("changes-issues");
+    if(a.detected_issues && a.detected_issues.length){
+      if(issuesWrap) issuesWrap.style.display="";
+      if(issuesUl) issuesUl.innerHTML=a.detected_issues.map(i=>`<li>${escapeHtml(i)}</li>`).join("");
+    }else if(issuesWrap){issuesWrap.style.display="none";}
+    const link=$("changes-commit-link");
+    if(link){
+      if(a.github_commit_url){link.href=a.github_commit_url; link.style.display="";}
+      else{link.style.display="none";}
+    }
+  }
+
+  // Suggested tests
+  if((a.suggested_new_tests||[]).length){
+    if(suggested) suggested.style.display="";
+    const list=$("changes-suggested");
+    if(list){
+      list.innerHTML=a.suggested_new_tests.map((t,i)=>{
+        const catCls={Vulnerability:"p-red",Security:"p-red",Performance:"p-violet",Header:"p-amber",
+                       UI:"p-blue",Unit:"p-slate",API:"p-blue",Integration:"p-blue",Functional:"p-blue"};
+        return `<div style="display:flex;align-items:flex-start;gap:10px;padding:9px 12px;background:#fff;border:1px solid #e2e8f0;border-radius:8px;">
+          <div style="width:20px;height:20px;border-radius:50%;background:#f1f5f9;color:#64748b;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px;">${i+1}</div>
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:12.5px;font-weight:600;color:#0f172a;">${escapeHtml(t.name)}</div>
+            <div style="font-size:11px;color:#475569;margin-top:2px;">${escapeHtml(t.description||"")}</div>
+            <div style="font-size:10.5px;color:#94a3b8;margin-top:3px;font-style:italic;">${escapeHtml(t.rationale||"")}</div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:3px;align-items:flex-end;flex-shrink:0;">
+            <span class="pill ${catCls[t.category]||"p-slate"}" style="font-size:10px;">${t.category}</span>
+            <span style="font-size:10px;color:#94a3b8;">${t.module}</span>
+          </div>
+        </div>`;
+      }).join("");
+    }
+  }
+
+  // Files
+  if(filesWrap){
+    filesWrap.style.display="";
+    setText("changes-files-count", cs.file_count);
+    setText("changes-sha-summary",
+      `${cs.baseline_sha.slice(0,7)} → ${cs.head_sha.slice(0,7)}  (+${cs.total_additions}/-${cs.total_deletions})`);
+    const tb=$("changes-files-tbody");
+    const statusCls={added:"p-green",modified:"p-blue",deleted:"p-red",renamed:"p-violet"};
+    if(tb){
+      tb.innerHTML=(cs.files||[]).map(f=>`
+        <tr>
+          <td><span class="pill ${statusCls[f.status]||"p-slate"}" style="font-size:10px;">${f.status}</span></td>
+          <td class="mono" style="font-size:11.5px;">${escapeHtml(f.path)}</td>
+          <td style="font-size:11px;color:#64748b;">${f.language}</td>
+          <td style="text-align:right;font-family:'JetBrains Mono',monospace;font-size:11px;">
+            <span style="color:#10b981;">+${f.additions}</span>
+            <span style="color:#94a3b8;margin:0 4px;">/</span>
+            <span style="color:#ef4444;">-${f.deletions}</span>
+          </td>
+        </tr>`).join("");
+    }
+  }
+}
+window.loadChanges=loadChanges;
+
+async function startChangeDrivenSession(planMode){
+  const name=`Change-driven (${planMode}) ${new Date().toLocaleTimeString()}`;
+  // All modules by default — runners auto-skip irrelevant categories
+  const modules=["Customers","Accounts","CreditCards","Deposits","Transactions","UI"];
+  try{
+    const sess=await apiFetch("/sessions",{method:"POST",body:JSON.stringify({
+      name, modules, test_types:["All"], plan_mode:planMode, use_change_context:true,
+    })});
+    navigateTo("run-tests");
+    _sid=sess.id;
+    _lPass=0;_lFail=0;_lErr=0;_lTotal=0;
+    resetExecUI();
+    showRp("rp-planning");
+    addPlanLog(`Session created (mode=${planMode}). Claude is generating the plan…`,"info");
+    connectWs(sess.id, true);
+    // Poll for plan
+    for(let i=0;i<90;i++){
+      await sleep(2000);
+      const s=await apiFetch(`/sessions/${sess.id}`).catch(()=>null);
+      if(!s) continue;
+      if(s.state==="AWAITING_APPROVAL"){renderPlan(s.plan); return;}
+      if(["FAILED","CANCELLED"].includes(s.state)){
+        addPlanLog(`Session ${s.state}: ${s.error_message||""}`, "fail");
+        return;
+      }
+    }
+  }catch(e){
+    alert("Failed to start change-driven session: "+e.message);
+  }
+}
+window.startChangeDrivenSession=startChangeDrivenSession;
+
+function escapeHtml(s){
+  if(s==null) return "";
+  return String(s).replace(/[&<>"']/g, ch=>(
+    {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[ch]
+  ));
+}
 
 function openReport(id,title){
   navigateTo("reports");
@@ -370,7 +550,65 @@ function connectWs(sid,planMode=false){
   _ws.onclose=()=>{if(!planMode)appendTerm("t-dim","[ws] connection closed");};
 }
 
-function handleWs({type,data},planMode){
+// Live UI stream state
+let _uiFrameCount=0, _uiFpsStart=null, _uiCtx=null, _uiImg=null;
+
+function ensureUiCanvas(){
+  const c=$("ui-live"); if(!c) return null;
+  if(!_uiCtx) _uiCtx=c.getContext("2d");
+  if(!_uiImg){_uiImg=new Image();}
+  return _uiCtx;
+}
+
+function showUiStreamPanel(){
+  const w=$("ui-stream-wrap"); if(w) w.style.display="";
+  if(!_uiFpsStart){_uiFpsStart=Date.now(); _uiFrameCount=0;}
+}
+
+function hideUiStreamPanel(){
+  const w=$("ui-stream-wrap"); if(w) w.style.display="none";
+}
+
+function drawUiFrame(b64){
+  showUiStreamPanel();
+  const ctx=ensureUiCanvas(); if(!ctx) return;
+  const img=new Image();
+  img.onload=()=>{
+    ctx.drawImage(img,0,0,1024,640);
+  };
+  img.src="data:image/jpeg;base64,"+b64;
+  _uiFrameCount++;
+  if(_uiFrameCount%6===0){
+    const sec=(Date.now()-_uiFpsStart)/1000;
+    setText("ui-stream-fps", (sec>0?(_uiFrameCount/sec).toFixed(1):"—")+" fps");
+  }
+}
+
+function appendActionSnapshot(action, b64){
+  showUiStreamPanel();
+  const strip=$("ui-history-strip"); if(!strip) return;
+  const row=document.createElement("div");
+  row.style.cssText="display:flex;gap:6px;background:#0d1117;border:1px solid #1c2333;border-radius:5px;padding:5px;cursor:pointer;";
+  row.title=action;
+  row.onclick=()=>drawUiFrame(b64);  // click thumbnail -> re-render large
+  row.innerHTML=`<img src="data:image/png;base64,${b64}" style="width:88px;height:auto;border-radius:3px;object-fit:cover;flex-shrink:0;" />
+    <div style="flex:1;min-width:0;font-size:10px;color:#8b949e;line-height:1.4;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(action)}</div>`;
+  strip.appendChild(row);
+  strip.scrollTop=strip.scrollHeight;
+}
+
+// Debug panel state — collects EVERY ws event when enabled
+let _debugEnabled=false;
+window.toggleDebugPanel=function(){
+  _debugEnabled=!_debugEnabled;
+  setText("debug-toggle-state", _debugEnabled?"ON":"OFF");
+};
+
+function handleWs(envelope, planMode){
+  const {type,data}=envelope;
+  if(_debugEnabled){
+    appendLog("t-dim", `[DEBUG] ${type}: ${JSON.stringify(data).slice(0,200)}`);
+  }
   if(type==="log"){
     const l=(data.level||"").toLowerCase();
     const cls=l==="error"?"t-fail":l.startsWith("warn")?"t-warn":"t-info";
@@ -387,6 +625,7 @@ function handleWs({type,data},planMode){
     if(!planMode)appendLog("t-dim",`→ ${data.state}${data.detail?" | "+data.detail:""}`);
     if(["COMPLETED","FAILED","CANCELLED"].includes(data.state)){
       stopTimer();
+      hideUiStreamPanel();
       apiFetch(`/sessions/${_sid}`).then(s=>showDone(s)).catch(()=>{});
     }
   }else if(type==="plan_ready"){
@@ -395,6 +634,10 @@ function handleWs({type,data},planMode){
     showClarif(data.question);
   }else if(type==="report_ready"){
     _doneReportId=data.report_id;
+  }else if(type==="ui_frame"){
+    drawUiFrame(data.frame);
+  }else if(type==="ui_snapshot"){
+    appendActionSnapshot(data.action, data.snapshot);
   }
 }
 
@@ -418,6 +661,11 @@ function resetExecUI(){
   setText("exec-prog-lbl","0 of 0");
   const bar=$("exec-prog-bar");if(bar)bar.style.width="0%";
   hide($("clarif-panel"));
+  // Reset live UI panel
+  const strip=$("ui-history-strip"); if(strip) strip.innerHTML="";
+  _uiFrameCount=0; _uiFpsStart=null;
+  setText("ui-stream-fps", "— fps");
+  hideUiStreamPanel();
 }
 function updateExecProg(){
   setText("exec-passed",_lPass);setText("exec-failed",_lFail);setText("exec-errors",_lErr);

@@ -9,7 +9,7 @@ from core.event_bus import (
 )
 from core.logging_config import get_logger
 from models.schemas import (
-    Plan, Session, SessionState, TestResult, TestStatus, TestType,
+    Plan, Session, SessionState, TestCategory, TestResult, TestStatus, TestType,
     BankingModule,
 )
 from orchestrator import session_store
@@ -17,7 +17,10 @@ from orchestrator.agents.execution_agent import ExecutionAgent
 from orchestrator.agents.intelligence_agent import IntelligenceAgent
 from orchestrator.agents.ui_agent import UIAgent
 from orchestrator.planner import generate_plan
-from test_runner import report_generator, script_runner
+from test_runner import (
+    header_runner, perf_runner, report_generator, script_runner,
+    unit_runner, vuln_scanner,
+)
 
 log = get_logger("Engine")
 
@@ -99,8 +102,23 @@ async def cancel(session: Session) -> None:
 # ─── Internal execution flow ─────────────────────────────────────────────
 
 async def _execute(session: Session) -> None:
+    """Execute the approved plan in the canonical category order:
+
+    1. Vulnerability scanning  (fast, can fail-fast)
+    2. Unit tests              (generated from diff)
+    3. Header tests
+    4. API + Integration tests (existing api_runner)
+    5. Performance tests
+    6. UI tests with screencast (slowest)
+    7. Script tests
+    8. Analyse + report
+    """
     try:
+        await _run_vuln_scans(session)
+        await _run_unit_tests(session)
+        await _run_header_tests(session)
         await _run_api_tests(session)
+        await _run_perf_tests(session)
         if BankingModule.UI in session.modules:
             await _run_ui_tests(session)
         await _run_script_tests(session)
@@ -116,13 +134,111 @@ async def _execute(session: Session) -> None:
         await emit_state_change(session.id, SessionState.FAILED, str(exc))
 
 
+def _plan_has_category(session: Session, category: TestCategory) -> bool:
+    """True if any planned test belongs to the given category."""
+    if not session.plan:
+        return False
+    cat_val = category.value
+    for item in session.plan.items:
+        tc_cat = item.test_case.category
+        tc_cat_val = tc_cat.value if hasattr(tc_cat, "value") else str(tc_cat)
+        if tc_cat_val == cat_val:
+            return True
+    return False
+
+
+async def _emit_result(session: Session, result: TestResult, agent_label: str) -> None:
+    """Append, persist, and broadcast a single test result."""
+    session.results.append(result)
+    session_store.update(session)
+    await emit_test_result(session.id, result.model_dump(mode="json"))
+    icon = "✓" if result.status == TestStatus.PASSED else ("✗" if result.status == TestStatus.FAILED else "⚠")
+    await emit_log(
+        session.id,
+        f"[{agent_label}] {icon} {result.test_name} — {result.status} ({result.duration_ms}ms)",
+        level="INFO" if result.status == TestStatus.PASSED else "WARNING",
+    )
+
+
+async def _run_vuln_scans(session: Session) -> None:
+    if not _plan_has_category(session, TestCategory.VULNERABILITY) and session.change_context is None:
+        return
+    await emit_log(session.id, "[Engine] Running vulnerability scans (pip-audit + bandit + semgrep)…")
+    try:
+        results = await vuln_scanner.run_all_scans()
+    except Exception as exc:
+        await emit_log(session.id, f"[VulnScanner] Error: {exc}", level="ERROR")
+        return
+    for r in results:
+        await _emit_result(session, r, "VulnScanner")
+
+
+async def _run_unit_tests(session: Session) -> None:
+    if not _plan_has_category(session, TestCategory.UNIT) and session.change_context is None:
+        return
+    await emit_log(session.id, "[Engine] Generating + running unit tests…")
+    try:
+        cs = session.change_context.change_set if session.change_context else None
+        results = await unit_runner.run_unit_tests(session.id, cs)
+    except Exception as exc:
+        await emit_log(session.id, f"[UnitRunner] Error: {exc}", level="ERROR")
+        return
+    for r in results:
+        await _emit_result(session, r, "UnitRunner")
+
+
+async def _run_header_tests(session: Session) -> None:
+    if not _plan_has_category(session, TestCategory.HEADER) and session.change_context is None:
+        return
+    await emit_log(session.id, "[Engine] Running HTTP security-header tests…")
+    try:
+        results = await header_runner.run_header_tests()
+    except Exception as exc:
+        await emit_log(session.id, f"[HeaderRunner] Error: {exc}", level="ERROR")
+        return
+    for r in results:
+        await _emit_result(session, r, "HeaderRunner")
+
+
+async def _run_perf_tests(session: Session) -> None:
+    if not _plan_has_category(session, TestCategory.PERFORMANCE) and session.change_context is None:
+        return
+    await emit_log(session.id, "[Engine] Running performance probes…")
+    try:
+        results = await perf_runner.run_perf_tests()
+    except Exception as exc:
+        await emit_log(session.id, f"[PerfRunner] Error: {exc}", level="ERROR")
+        return
+    for r in results:
+        await _emit_result(session, r, "PerfRunner")
+
+
+_DEDICATED_RUNNER_CATEGORIES = {
+    TestCategory.UNIT.value,
+    TestCategory.VULNERABILITY.value,
+    TestCategory.HEADER.value,
+    TestCategory.PERFORMANCE.value,
+    TestCategory.UI.value,
+}
+
+
+def _is_api_runner_case(tc) -> bool:
+    """A case belongs to api_runner if it's an HTTP test not handled by a dedicated runner."""
+    if tc.script_path:
+        return False
+    if tc.module == BankingModule.UI:
+        return False
+    cat_val = tc.category.value if hasattr(tc.category, "value") else str(tc.category)
+    if cat_val in _DEDICATED_RUNNER_CATEGORIES:
+        return False
+    # Must have an endpoint to be runnable as an API test
+    return bool(tc.endpoint)
+
+
 async def _run_api_tests(session: Session) -> None:
     if not session.plan:
         return
-    api_cases = [
-        item.test_case for item in session.plan.items
-        if not item.test_case.script_path and item.test_case.module != BankingModule.UI
-    ]
+    api_cases = [item.test_case for item in session.plan.items if _is_api_runner_case(item.test_case)]
     if not api_cases:
         return
 
@@ -130,15 +246,7 @@ async def _run_api_tests(session: Session) -> None:
     agent = ExecutionAgent(session.id)
 
     async def _on_result(result: TestResult) -> None:
-        session.results.append(result)
-        session_store.update(session)
-        await emit_test_result(session.id, result.model_dump(mode="json"))
-        icon = "✓" if result.status == TestStatus.PASSED else "✗"
-        await emit_log(
-            session.id,
-            f"[ExecutionAgent] {icon} {result.test_name} — {result.status} ({result.duration_ms}ms)",
-            level="INFO" if result.status == TestStatus.PASSED else "WARNING",
-        )
+        await _emit_result(session, result, "ExecutionAgent")
 
     await agent.run_suite(api_cases, on_result=_on_result)
 

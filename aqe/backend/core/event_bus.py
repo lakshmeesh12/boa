@@ -68,3 +68,13 @@ async def emit_clarification_request(session_id: str, question: str) -> None:
 
 async def emit_report_ready(session_id: str, report_id: str) -> None:
     await publish(session_id, "report_ready", {"report_id": report_id})
+
+
+async def emit_ui_frame(session_id: str, frame_b64: str) -> None:
+    """High-frequency frames from the CDP screencast for the live UI canvas."""
+    await publish(session_id, "ui_frame", {"frame": frame_b64})
+
+
+async def emit_ui_action_snapshot(session_id: str, action: str, snapshot_b64: str) -> None:
+    """One snapshot per Claude action — feeds the clickable action history strip."""
+    await publish(session_id, "ui_snapshot", {"action": action, "snapshot": snapshot_b64})
