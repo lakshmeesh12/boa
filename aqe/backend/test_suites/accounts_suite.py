@@ -1,0 +1,56 @@
+from models.schemas import BankingModule, TestCase, TestType
+
+ACCOUNTS_SUITE: list[TestCase] = [
+    TestCase(
+        name="Get account — valid ID",
+        description="GET /api/v1/accounts/{id} returns full account with balance and status.",
+        module=BankingModule.ACCOUNTS,
+        test_type=TestType.FUNCTIONAL,
+        method="GET", endpoint="/api/v1/accounts/{account_id}",
+        expected_status=200,
+        expected_fields=["account_number", "account_type", "balance", "status"],
+    ),
+    TestCase(
+        name="Get account — non-existent ID returns 404",
+        description="A valid ObjectId that doesn't match any account must return 404.",
+        module=BankingModule.ACCOUNTS,
+        test_type=TestType.EDGE_CASE,
+        method="GET", endpoint="/api/v1/accounts/{nonexistent_id}",
+        expected_status=404,
+    ),
+    TestCase(
+        name="Get account — invalid ObjectId returns 422",
+        description="A malformed ID must return 422.",
+        module=BankingModule.ACCOUNTS,
+        test_type=TestType.EDGE_CASE,
+        method="GET", endpoint="/api/v1/accounts/bad-id",
+        expected_status=422,
+    ),
+    TestCase(
+        name="Account statement — returns transaction history",
+        description="GET /api/v1/accounts/{id}/statement returns list of transactions.",
+        module=BankingModule.ACCOUNTS,
+        test_type=TestType.FUNCTIONAL,
+        method="GET", endpoint="/api/v1/accounts/{account_id}/statement",
+        expected_status=200,
+        expected_fields=["account_id", "transactions", "transaction_count"],
+    ),
+    TestCase(
+        name="Account statement — limit=1 boundary",
+        description="Statement with limit=1 returns at most 1 transaction.",
+        module=BankingModule.ACCOUNTS,
+        test_type=TestType.EDGE_CASE,
+        method="GET", endpoint="/api/v1/accounts/{account_id}/statement?limit=1",
+        expected_status=200,
+        expected_fields=["transactions"],
+    ),
+    TestCase(
+        name="Audit log — query by trace_id",
+        description="GET /api/v1/audit-log?trace_id=X returns matching log entries.",
+        module=BankingModule.ACCOUNTS,
+        test_type=TestType.FUNCTIONAL,
+        method="GET", endpoint="/api/v1/audit-log?trace_id={trace_id}",
+        expected_status=200,
+        expected_fields=["entries", "count"],
+    ),
+]

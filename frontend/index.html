@@ -1,0 +1,998 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Bank of America — Online Banking</title>
+  <link href="https://fonts.googleapis.com/css2?family=Arial:wght@400;700&display=swap" rel="preconnect">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --red:    #E31837;
+      --red-dk: #B5122A;
+      --navy:   #012169;
+      --navy-lt:#1A3A8F;
+      --white:  #FFFFFF;
+      --bg:     #F4F4F6;
+      --bg2:    #FAFAFA;
+      --border: #DCDCDC;
+      --txt:    #1A1A1A;
+      --txt2:   #5A5A5A;
+      --txt3:   #8A8A8A;
+      --green:  #1A7F37;
+      --warn:   #B54708;
+      --blue-lnk:#004EBC;
+      --card-shadow: 0 1px 4px rgba(0,0,0,.10), 0 0 0 1px rgba(0,0,0,.05);
+    }
+    html, body { height: 100%; overflow: hidden; font-family: Arial, 'Helvetica Neue', sans-serif; background: var(--bg); color: var(--txt); font-size: 14px; }
+    a { color: var(--blue-lnk); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    button { cursor: pointer; font-family: inherit; }
+    input, select { font-family: inherit; }
+
+    /* ─── GLOBAL LAYOUT ─── */
+    #app { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+
+    /* ─── TOP HEADER ─── */
+    #topbar {
+      background: var(--navy);
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      padding: 0 24px;
+      height: 54px;
+      gap: 24px;
+      position: relative;
+      z-index: 50;
+    }
+    .bfa-logo {
+      display: flex; align-items: center; gap: 10px;
+      color: #fff; text-decoration: none; flex-shrink: 0;
+    }
+    .bfa-logo-flag {
+      width: 36px; height: 26px;
+      display: grid; grid-template-rows: 1fr 1fr 1fr; border-radius: 2px; overflow: hidden;
+    }
+    .bfa-logo-flag > div:nth-child(1) { background: var(--red); }
+    .bfa-logo-flag > div:nth-child(2) { background: var(--white); }
+    .bfa-logo-flag > div:nth-child(3) { background: var(--red); }
+    .bfa-logo-text { font-size: 15px; font-weight: 700; letter-spacing: .3px; line-height: 1.1; }
+    .bfa-logo-sub  { font-size: 10px; font-weight: 400; color: rgba(255,255,255,.75); letter-spacing: .5px; }
+
+    #topbar-right { margin-left: auto; display: flex; align-items: center; gap: 16px; }
+    .topbar-customer {
+      display: flex; align-items: center; gap: 8px;
+      color: #fff; font-size: 13px; cursor: pointer;
+    }
+    .topbar-avatar {
+      width: 30px; height: 30px; border-radius: 50%; background: var(--red);
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 700; font-size: 12px; color: #fff;
+    }
+    .topbar-icon-btn {
+      background: none; border: none; color: rgba(255,255,255,.8);
+      font-size: 18px; padding: 4px; display: flex; align-items: center;
+      transition: color .15s;
+    }
+    .topbar-icon-btn:hover { color: #fff; }
+
+    /* ─── SECONDARY NAV ─── */
+    #subnav {
+      background: var(--white);
+      border-bottom: 2px solid var(--border);
+      display: flex;
+      align-items: stretch;
+      padding: 0 24px;
+      height: 42px;
+      flex-shrink: 0;
+      box-shadow: 0 1px 3px rgba(0,0,0,.06);
+    }
+    .subnav-item {
+      display: flex; align-items: center; padding: 0 14px;
+      font-size: 13px; font-weight: 600; color: var(--txt2);
+      border-bottom: 3px solid transparent;
+      margin-bottom: -2px;
+      cursor: pointer;
+      transition: color .12s, border-color .12s;
+      white-space: nowrap;
+      border-top: none; border-left: none; border-right: none;
+      background: none;
+    }
+    .subnav-item:hover { color: var(--txt); border-bottom-color: var(--border); }
+    .subnav-item.active { color: var(--red); border-bottom-color: var(--red); font-weight: 700; }
+
+    /* ─── BODY AREA ─── */
+    #body { flex: 1; display: flex; overflow: hidden; }
+
+    /* ─── LEFT SIDEBAR ─── */
+    #sidebar {
+      width: 256px; flex-shrink: 0;
+      background: var(--white);
+      border-right: 1px solid var(--border);
+      overflow-y: auto;
+      display: flex; flex-direction: column;
+    }
+    .sidebar-section-header {
+      padding: 14px 16px 6px;
+      font-size: 11px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .08em; color: var(--txt3);
+      border-top: 1px solid var(--border);
+    }
+    .sidebar-section-header:first-child { border-top: none; }
+    .sidebar-account-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 16px; cursor: pointer;
+      border-left: 3px solid transparent;
+      transition: background .1s, border-color .1s;
+      text-decoration: none;
+    }
+    .sidebar-account-item:hover { background: #F0F2F8; }
+    .sidebar-account-item.active { background: #EEF2FC; border-left-color: var(--red); }
+    .sidebar-acct-icon {
+      width: 32px; height: 32px; border-radius: 6px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 15px; flex-shrink: 0;
+    }
+    .acct-icon-check { background: #E8F0FE; }
+    .acct-icon-save  { background: #E6F4EA; }
+    .acct-icon-card  { background: #FEE8E8; }
+    .acct-icon-fd    { background: #FFF3E0; }
+    .acct-icon-loan  { background: #F3E8FF; }
+    .sidebar-acct-info { flex: 1; min-width: 0; }
+    .sidebar-acct-name { font-size: 12px; font-weight: 600; color: var(--txt); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .sidebar-acct-num  { font-size: 11px; color: var(--txt3); font-family: monospace; }
+    .sidebar-acct-bal  { font-size: 12px; font-weight: 700; color: var(--txt); flex-shrink: 0; }
+
+    .sidebar-demo-bar {
+      margin-top: auto; padding: 12px 14px;
+      border-top: 1px solid var(--border);
+      background: #F8F8FB;
+    }
+    .demo-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--txt3); margin-bottom: 5px; }
+    .demo-select { width: 100%; font-size: 11px; padding: 5px 8px; border: 1px solid var(--border); border-radius: 4px; background: #fff; }
+
+    /* ─── MAIN CONTENT AREA ─── */
+    #main-content { flex: 1; overflow-y: auto; background: var(--bg); }
+    .view { display: none; padding: 24px; }
+    .view.active { display: block; }
+
+    /* ─── COMMON COMPONENTS ─── */
+    .page-title { font-size: 20px; font-weight: 700; color: var(--navy); margin-bottom: 4px; }
+    .page-sub   { font-size: 13px; color: var(--txt2); margin-bottom: 20px; }
+
+    .card { background: var(--white); border-radius: 6px; box-shadow: var(--card-shadow); }
+    .card-header { padding: 14px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+    .card-title  { font-size: 14px; font-weight: 700; color: var(--navy); }
+    .card-body   { padding: 20px; }
+
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 9px 18px; border-radius: 4px; font-size: 13px; font-weight: 700; cursor: pointer; border: none; transition: all .15s; text-decoration: none; }
+    .btn-red     { background: var(--red); color: #fff; }
+    .btn-red:hover { background: var(--red-dk); color: #fff; text-decoration: none; }
+    .btn-navy    { background: var(--navy); color: #fff; }
+    .btn-navy:hover { background: var(--navy-lt); color: #fff; }
+    .btn-outline { background: #fff; color: var(--navy); border: 2px solid var(--navy); }
+    .btn-outline:hover { background: #F0F2F8; }
+    .btn-ghost   { background: #fff; color: var(--txt2); border: 1px solid var(--border); }
+    .btn-ghost:hover { border-color: #999; color: var(--txt); }
+    .btn-sm { padding: 6px 12px; font-size: 12px; }
+    .btn-green  { background: var(--green); color: #fff; }
+
+    .tag-active   { background: #E6F4EA; color: #137333; border-radius: 12px; padding: 2px 10px; font-size: 11px; font-weight: 700; }
+    .tag-blocked  { background: #FCE8E8; color: #C5221F; border-radius: 12px; padding: 2px 10px; font-size: 11px; font-weight: 700; }
+    .tag-pending  { background: #FFF3E0; color: #B06000; border-radius: 12px; padding: 2px 10px; font-size: 11px; font-weight: 700; }
+    .tag-matured  { background: #F3E8FF; color: #6A1B9A; border-radius: 12px; padding: 2px 10px; font-size: 11px; font-weight: 700; }
+    .tag-frozen   { background: #E3F2FD; color: #0277BD; border-radius: 12px; padding: 2px 10px; font-size: 11px; font-weight: 700; }
+
+    .divider { height: 1px; background: var(--border); margin: 16px 0; }
+
+    .amount-positive { color: var(--green); font-weight: 700; }
+    .amount-negative { color: var(--red); font-weight: 700; }
+
+    /* ─── OVERVIEW ─── */
+    .acct-cards-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 16px; }
+    .acct-summary-card {
+      background: #fff; border-radius: 6px; box-shadow: var(--card-shadow);
+      padding: 18px 20px; cursor: pointer; transition: box-shadow .15s, transform .1s;
+      border-left: 4px solid var(--navy);
+    }
+    .acct-summary-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,.12); transform: translateY(-1px); }
+    .acct-summary-card.cc-card { border-left-color: var(--red); }
+    .acct-summary-card.fd-card { border-left-color: #F59E0B; }
+    .acct-card-top { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 12px; }
+    .acct-card-name { font-size: 14px; font-weight: 700; color: var(--navy); }
+    .acct-card-num  { font-size: 12px; color: var(--txt3); font-family: monospace; margin-top: 2px; }
+    .acct-card-bal  { font-size: 24px; font-weight: 700; color: var(--txt); }
+    .acct-card-bal-lbl { font-size: 11px; color: var(--txt3); margin-top: 2px; }
+    .acct-card-actions { display: flex; gap: 8px; margin-top: 14px; }
+
+    /* ─── ACCOUNT DETAIL ─── */
+    .acct-hero { background: var(--navy); color: #fff; border-radius: 6px; padding: 22px 24px; margin-bottom: 20px; }
+    .acct-hero-name { font-size: 13px; color: rgba(255,255,255,.75); margin-bottom: 4px; }
+    .acct-hero-bal  { font-size: 32px; font-weight: 700; }
+    .acct-hero-sub  { font-size: 12px; color: rgba(255,255,255,.65); margin-top: 4px; }
+    .acct-hero-row  { display: flex; gap: 32px; margin-top: 16px; }
+    .acct-hero-stat { }
+    .acct-hero-stat-lbl { font-size: 11px; color: rgba(255,255,255,.65); }
+    .acct-hero-stat-val { font-size: 15px; font-weight: 700; }
+
+    .tabs { display: flex; gap: 0; border-bottom: 2px solid var(--border); margin-bottom: 20px; }
+    .tab-btn { padding: 10px 18px; font-size: 13px; font-weight: 600; color: var(--txt2); background: none; border: none; border-bottom: 3px solid transparent; margin-bottom: -2px; cursor: pointer; transition: all .12s; }
+    .tab-btn.active { color: var(--red); border-bottom-color: var(--red); }
+    .tab-btn:hover { color: var(--txt); }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+
+    /* ─── TRANSACTIONS ─── */
+    .txn-table { width: 100%; border-collapse: collapse; }
+    .txn-table th { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--txt3); padding: 8px 12px; border-bottom: 2px solid var(--border); text-align: left; background: #FAFAFA; }
+    .txn-table td { padding: 11px 12px; border-bottom: 1px solid #F2F2F2; font-size: 13px; vertical-align: middle; }
+    .txn-table tr:hover td { background: #F9F9FB; }
+    .txn-desc { font-weight: 600; color: var(--txt); }
+    .txn-cat  { font-size: 11px; color: var(--txt3); }
+
+    /* ─── CREDIT CARD VIEW ─── */
+    .cc-hero {
+      background: linear-gradient(135deg, #1A1A2E 0%, #16213E 40%, #0F3460 100%);
+      border-radius: 10px; padding: 22px 24px; color: #fff;
+      margin-bottom: 20px; position: relative; overflow: hidden; min-height: 160px;
+    }
+    .cc-hero::before {
+      content: ''; position: absolute; right: -40px; top: -40px;
+      width: 200px; height: 200px; border-radius: 50%;
+      background: rgba(255,255,255,.04);
+    }
+    .cc-hero::after {
+      content: ''; position: absolute; right: 30px; bottom: -60px;
+      width: 160px; height: 160px; border-radius: 50%;
+      background: rgba(255,255,255,.03);
+    }
+    .cc-hero-type   { font-size: 11px; color: rgba(255,255,255,.65); letter-spacing: .1em; text-transform: uppercase; }
+    .cc-hero-name   { font-size: 17px; font-weight: 700; margin-top: 2px; }
+    .cc-hero-number { font-size: 15px; letter-spacing: .2em; font-family: monospace; margin-top: 16px; color: rgba(255,255,255,.85); }
+    .cc-hero-bottom { display: flex; align-items: flex-end; justify-content: space-between; margin-top: 16px; }
+    .cc-hero-exp    { font-size: 11px; color: rgba(255,255,255,.6); }
+    .cc-hero-chip   { width: 36px; height: 28px; background: linear-gradient(135deg, #D4AF37, #F0D060); border-radius: 4px; }
+    .cc-logo-mark   { width: 44px; height: 44px; position: absolute; right: 20px; top: 18px; display: flex; }
+    .cc-logo-circle { width: 30px; height: 30px; border-radius: 50%; }
+    .cc-logo-c1     { background: rgba(235,0,27,.85); margin-right: -10px; }
+    .cc-logo-c2     { background: rgba(255,130,0,.8); }
+
+    .cc-stats-grid  { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--border); border-radius: 6px; overflow: hidden; margin-bottom: 20px; box-shadow: var(--card-shadow); }
+    .cc-stat-box    { background: #fff; padding: 16px 18px; }
+    .cc-stat-lbl    { font-size: 11px; color: var(--txt3); font-weight: 600; text-transform: uppercase; letter-spacing: .05em; }
+    .cc-stat-val    { font-size: 20px; font-weight: 700; color: var(--txt); margin-top: 4px; }
+    .cc-stat-sub    { font-size: 11px; color: var(--txt3); margin-top: 2px; }
+
+    .util-bar-wrap  { margin: 0 0 20px; }
+    .util-bar-track { height: 8px; background: #E8E8E8; border-radius: 4px; overflow: hidden; margin-top: 6px; }
+    .util-bar-fill  { height: 100%; border-radius: 4px; transition: width .6s ease; }
+
+    .cc-action-row { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 20px; }
+
+    .payment-info-card { background: #FFF8E1; border: 1px solid #FFE082; border-radius: 6px; padding: 14px 18px; margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+    .pay-due-label  { font-size: 11px; color: var(--warn); font-weight: 700; text-transform: uppercase; letter-spacing: .05em; }
+    .pay-due-date   { font-size: 17px; font-weight: 700; color: var(--txt); }
+    .pay-due-days   { font-size: 11px; color: var(--warn); }
+    .pay-min        { text-align: right; }
+    .pay-min-lbl    { font-size: 11px; color: var(--txt3); }
+    .pay-min-val    { font-size: 17px; font-weight: 700; color: var(--txt); }
+
+    /* ─── FIXED DEPOSIT VIEW ─── */
+    .fd-hero { background: linear-gradient(135deg, #1B3A4B 0%, #0C2340 100%); color: #fff; border-radius: 10px; padding: 22px 24px; margin-bottom: 20px; }
+    .fd-hero-label  { font-size: 11px; color: rgba(255,255,255,.65); text-transform: uppercase; letter-spacing: .1em; }
+    .fd-hero-title  { font-size: 18px; font-weight: 700; margin-top: 3px; }
+    .fd-hero-amount { font-size: 34px; font-weight: 700; margin-top: 12px; }
+    .fd-hero-amtsub { font-size: 12px; color: rgba(255,255,255,.65); margin-top: 3px; }
+    .fd-hero-stats  { display: flex; gap: 28px; margin-top: 18px; flex-wrap: wrap; }
+    .fd-stat        { }
+    .fd-stat-lbl    { font-size: 11px; color: rgba(255,255,255,.6); }
+    .fd-stat-val    { font-size: 15px; font-weight: 700; margin-top: 2px; }
+
+    .fd-progress-wrap { background: #fff; border-radius: 6px; box-shadow: var(--card-shadow); padding: 18px 20px; margin-bottom: 20px; }
+    .fd-progress-lbl  { font-size: 12px; color: var(--txt2); display: flex; justify-content: space-between; margin-bottom: 8px; }
+    .fd-progress-track { height: 10px; background: #E8E8E8; border-radius: 5px; overflow: hidden; }
+    .fd-progress-fill  { height: 100%; border-radius: 5px; background: linear-gradient(90deg, #F59E0B, #D97706); transition: width .8s ease; }
+
+    .fd-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
+    .fd-info-card { background: #fff; border-radius: 6px; box-shadow: var(--card-shadow); padding: 16px 18px; }
+    .fd-info-lbl  { font-size: 11px; color: var(--txt3); font-weight: 600; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 4px; }
+    .fd-info-val  { font-size: 18px; font-weight: 700; color: var(--txt); }
+    .fd-info-sub  { font-size: 11px; color: var(--txt3); margin-top: 2px; }
+
+    .calculator-form { background: #fff; border-radius: 6px; box-shadow: var(--card-shadow); padding: 20px; }
+    .calc-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin: 14px 0; }
+    .form-group label { display: block; font-size: 11px; font-weight: 700; color: var(--txt2); margin-bottom: 5px; text-transform: uppercase; letter-spacing: .05em; }
+    .form-group input, .form-group select { width: 100%; padding: 9px 11px; border: 1px solid var(--border); border-radius: 4px; font-size: 14px; font-family: inherit; outline: none; }
+    .form-group input:focus, .form-group select:focus { border-color: var(--navy); box-shadow: 0 0 0 3px rgba(1,33,105,.1); }
+    .calc-result { background: #F0F4FF; border: 1px solid #C7D7F9; border-radius: 6px; padding: 16px; margin-top: 14px; display: none; }
+    .calc-result-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+    .calc-r-lbl { font-size: 11px; color: var(--txt3); font-weight: 600; text-transform: uppercase; }
+    .calc-r-val { font-size: 20px; font-weight: 700; color: var(--navy); margin-top: 3px; }
+
+    /* ─── PLACEHOLDER VIEWS ─── */
+    .placeholder-hero { text-align: center; padding: 60px 40px; }
+    .placeholder-icon { font-size: 56px; margin-bottom: 16px; }
+    .placeholder-title { font-size: 22px; font-weight: 700; color: var(--navy); margin-bottom: 8px; }
+    .placeholder-sub   { font-size: 14px; color: var(--txt2); max-width: 420px; margin: 0 auto 24px; line-height: 1.5; }
+    .feature-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; max-width: 720px; margin: 0 auto; }
+    .feature-card { background: #fff; border-radius: 6px; padding: 20px; box-shadow: var(--card-shadow); text-align: center; cursor: pointer; transition: box-shadow .15s, transform .15s; }
+    .feature-card:hover { box-shadow: 0 4px 14px rgba(0,0,0,.15); transform: translateY(-2px); }
+    .feature-card-icon { font-size: 28px; margin-bottom: 8px; }
+    .feature-card-title { font-size: 13px; font-weight: 700; color: var(--navy); }
+    .feature-card-sub   { font-size: 12px; color: var(--txt2); margin-top: 3px; }
+
+    /* ─── MODAL ─── */
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 100; display: none; align-items: center; justify-content: center; }
+    .modal-overlay.open { display: flex; }
+    .modal-box { background: #fff; border-radius: 8px; width: 480px; max-width: 95vw; box-shadow: 0 20px 60px rgba(0,0,0,.2); }
+    .modal-header { padding: 18px 22px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+    .modal-title  { font-size: 16px; font-weight: 700; color: var(--navy); }
+    .modal-close  { background: none; border: none; font-size: 20px; color: var(--txt3); cursor: pointer; line-height: 1; }
+    .modal-body   { padding: 22px; }
+    .modal-footer { padding: 16px 22px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 10px; }
+
+    /* ─── NOTICES / ALERTS ─── */
+    .alert { border-radius: 4px; padding: 12px 16px; font-size: 13px; margin-bottom: 16px; display: flex; align-items: flex-start; gap: 10px; }
+    .alert-info    { background: #EEF4FF; border-left: 4px solid var(--navy); color: var(--navy); }
+    .alert-success { background: #E6F4EA; border-left: 4px solid var(--green); color: #137333; }
+    .alert-warn    { background: #FFF3E0; border-left: 4px solid #F59E0B; color: #7C5700; }
+    .alert-danger  { background: #FCE8E8; border-left: 4px solid var(--red); color: #C5221F; }
+
+    /* ─── REWARDS ─── */
+    .rewards-card { background: linear-gradient(135deg, #F59E0B 0%, #D97706 100%); border-radius: 8px; padding: 18px 22px; color: #fff; margin-bottom: 20px; }
+    .rewards-lbl  { font-size: 11px; color: rgba(255,255,255,.8); text-transform: uppercase; letter-spacing: .1em; }
+    .rewards-pts  { font-size: 32px; font-weight: 700; }
+    .rewards-sub  { font-size: 12px; color: rgba(255,255,255,.75); margin-top: 2px; }
+    .rewards-row  { display: flex; justify-content: space-between; align-items: center; }
+
+    /* ─── SKELETON ─── */
+    .skel { background: linear-gradient(90deg,#ececec 25%,#e0e0e0 50%,#ececec 75%); background-size:300%;animation:sk 1.3s infinite;border-radius:4px;display:inline-block; }
+    @keyframes sk { 0%{background-position:100%} 100%{background-position:-100%} }
+
+    /* ─── CC SUB-NAV TABS ─── */
+    .cc-nav-btn { padding:8px 14px;font-size:13px;font-weight:600;color:#64748b;background:none;border:none;border-bottom:3px solid transparent;margin-bottom:-2px;cursor:pointer;white-space:nowrap;transition:all .12s; }
+    .cc-nav-btn:hover { color:#0f172a; }
+    .cc-nav-active { color:#E31837 !important; border-bottom-color:#E31837 !important; }
+    @keyframes spin { to { transform:rotate(360deg) } }
+
+    /* ─── MISC ─── */
+    .text-right { text-align: right; }
+    .flex-between { display: flex; align-items: center; justify-content: space-between; }
+    .mt-4 { margin-top: 4px; }
+    .mt-8 { margin-top: 8px; }
+    .mt-16 { margin-top: 16px; }
+    .mb-16 { margin-bottom: 16px; }
+    .mb-20 { margin-bottom: 20px; }
+    .gap-8 { gap: 8px; }
+    .flex { display: flex; }
+    .items-center { align-items: center; }
+    .mono { font-family: 'Courier New', monospace; }
+    .info-tooltip { font-size: 11px; color: var(--txt3); }
+  </style>
+  <script>
+    if (!sessionStorage.getItem('boa_logged_in')) { window.location.replace('/login.html'); }
+  </script>
+</head>
+<body>
+<div id="app">
+
+  <!-- ─── TOP HEADER ─── -->
+  <header id="topbar">
+    <a class="bfa-logo" href="#" onclick="return false;">
+      <!-- Official Bank of America logo SVG -->
+      <svg viewBox="0 0 397.3 39.8" style="height:24px;width:auto;fill:none;" xmlns="http://www.w3.org/2000/svg">
+        <style>.s0{fill:#E31837}.s1{fill:#FFFFFF}</style>
+        <g>
+          <g>
+            <path class="s0" d="M366.7,38c0-0.9,0.7-1.6,1.7-1.6c0.9,0,1.7,0.7,1.7,1.6c0,0.9-0.7,1.6-1.7,1.6C367.4,39.7,366.7,39,366.7,38M367,38c0,0.7,0.6,1.3,1.4,1.3c0.7,0,1.3-0.6,1.3-1.3s-0.6-1.3-1.3-1.3C367.6,36.8,367,37.3,367,38"/>
+            <path class="s0" d="M369.2,39h-0.3l-0.5-0.8h-0.3V39h-0.3v-1.8h0.8c0.2,0,0.3,0,0.5,0.1c0.1,0.1,0.2,0.2,0.2,0.4c0,0.4-0.3,0.5-0.6,0.5L369.2,39z M368.3,37.9c0.3,0,0.6,0,0.6-0.3c0-0.2-0.2-0.3-0.5-0.3h-0.5v0.5L368.3,37.9L368.3,37.9z"/>
+          </g>
+          <g>
+            <path class="s0" d="M360.5,39.7c11.6-9.9,27.9-19.6,36.8-23c-1.4-0.9-3.5-2.2-6-3.5c-11.5,3.8-25,12.3-37,21.8C356.3,36.4,358.5,38,360.5,39.7z"/>
+            <path class="s1" d="M355.1,12.7c-1.7-0.8-3.6-1.6-5-2.3c-4.4,2.2-10,5.4-17.2,10.5c1.6,0.8,3.2,1.8,5,2.8C343.4,19.7,349,15.8,355.1,12.7z"/>
+            <path class="s0" d="M365.5,7.9c-2.1-1.2-9.4-3.8-14.4-5c-1.5,0.6-3.6,1.4-5,2c1.8,0.5,8.6,2.3,14.4,5.2C362,9.4,364,8.5,365.5,7.9z"/>
+            <path class="s1" d="M340.8,7.2c-6.5,3-13.2,7.1-16.9,9.4c1.3,0.6,2.6,1.1,4.5,2c8.2-5.5,14.5-8.9,17.1-10C343.6,8,341.9,7.5,340.8,7.2z"/>
+            <path class="s0" d="M370.3,6.3c1.5-0.5,3.2-1,4.7-1.4c-4.3-1.8-9.7-3.7-14.5-4.9c-0.8,0.2-3.1,0.8-4.7,1.3C357.4,1.7,362.9,3,370.3,6.3z"/>
+            <path class="s0" d="M343.1,27c1.7,1.1,3.7,2.5,5.5,3.7c12.1-9.4,24-16.6,37.1-20.7c-1.8-0.9-3.4-1.7-5.4-2.7C372.4,9.2,359,14.6,343.1,27z"/>
+          </g>
+        </g>
+        <path class="s1" d="M0,36.8h8.8c4.5,0,6.6-2.3,6.6-5.6c0-2.6-1.4-4.4-4.3-5c2.5-0.6,3.7-2.2,3.7-4.4c0-2.9-2.1-5.2-6.6-5.2H0V36.8z M7.7,28.3c1.7,0,2.8,0.8,2.8,2.5c0,1.8-1.1,2.5-2.8,2.5H4.8v-5H7.7z M7.1,20.2c1.7,0,2.8,0.7,2.8,2.4c0,1.6-1.1,2.4-2.8,2.4H4.8v-4.7h2.3V20.2z M33.2,16.6h-5l-7.5,20.2h5l1.4-4.2h7.3l1.4,4.2h5.1L33.2,16.6z M30.7,21.4l2.4,7.4h-4.8L30.7,21.4z M66,16.6h-4.6v13.5l-8.6-13.5h-5.1v20.2h4.6V23.4l8.5,13.4h5.1L66,16.6L66,16.6z M87.1,36.8l-6.6-10.2v10.2h-4.9V16.6h4.9v9.7l6.3-9.7h5.5l-6.6,9.7l7.2,10.5H87.1z M110.3,26.7c0,4,2.4,6.5,5.6,6.5c3.1,0,5.6-2.5,5.6-6.5s-2.4-6.5-5.6-6.5C112.7,20.2,110.3,22.7,110.3,26.7L110.3,26.7z M105.1,26.7c0-5.9,4.2-10.5,10.8-10.5c6.5,0,10.7,4.6,10.8,10.5c0,5.9-4.2,10.5-10.8,10.5C109.3,37.3,105.1,32.6,105.1,26.7L105.1,26.7z M133.3,36.8h4.9v-8h6.4v-3.9h-6.4v-4.5h7.7l0.9-3.9h-13.5L133.3,36.8L133.3,36.8z M169.7,16.6h-5l-7.6,20.2h5l1.4-4.2h7.3l1.4,4.2h5.1L169.7,16.6z M167.2,21.4l2.4,7.4h-4.8L167.2,21.4z M206.5,16.6h-5.7l-5.3,10.9l-5.2-10.9h-5.8v20.2h4.4V23.3l6.5,13.5l6.5-13.5v13.5h4.6V16.6z M216,36.8h13.8v-3.9h-8.9v-4.5h7v-3.7h-7v-4.2h8.1l0.9-3.9H216L216,36.8L216,36.8z M248.5,36.8h5.3l-5-8.6c2.7-0.8,4.1-2.7,4.1-5.5c0-3.7-2.2-6.1-7.2-6.1h-7.8v20.2h4.8v-8h1.3L248.5,36.8z M244.8,20.4c2,0,3.1,0.9,3.1,2.6s-1.1,2.6-3.1,2.6h-2.1v-5.2C242.7,20.4,244.8,20.4,244.8,20.4z M261.2,36.8h4.9v-1.6V16.6h-4.9V36.8z M290.3,31.4c-1.9,1.3-3.5,1.8-5.2,1.8c-3.8,0-6.4-2.6-6.4-6.4c0-3.9,2.6-6.4,6.3-6.4c1.7,0,3.3,0.5,5.1,1.8v-4.6c-1.7-0.9-3.6-1.3-5.7-1.3c-6.7,0-10.9,4.6-10.9,10.5c0,6,4.2,10.5,10.9,10.5c2.2,0,4.2-0.4,5.9-1.3L290.3,31.4L290.3,31.4z M308.2,16.6h-5l-7.5,20.2h5l1.4-4.2h7.3l1.4,4.2h5.1L308.2,16.6z M305.8,21.4l2.4,7.4h-4.8L305.8,21.4z"/>
+      </svg>
+      <div style="font-size:10px;color:rgba(255,255,255,.6);letter-spacing:.5px;margin-top:2px;">ONLINE BANKING</div>
+    </a>
+
+    <div id="topbar-right">
+      <button class="topbar-icon-btn" title="Notifications">🔔</button>
+      <button class="topbar-icon-btn" title="Messages">✉</button>
+      <button class="topbar-icon-btn" title="Help">❓</button>
+      <div class="topbar-customer" id="customer-name-display">
+        <div class="topbar-avatar" id="customer-avatar">?</div>
+        <div>
+          <div style="font-size:13px;font-weight:700;" id="customer-name">Loading…</div>
+          <div style="font-size:10px;color:rgba(255,255,255,.6);">Personal Accounts</div>
+        </div>
+      </div>
+      <button class="btn btn-ghost btn-sm" style="font-size:11px;" onclick="logout()">Sign Out</button>
+    </div>
+  </header>
+
+  <!-- ─── SECONDARY NAV ─── -->
+  <nav id="subnav">
+    <button class="subnav-item active" data-nav="overview" onclick="navTo('overview',this)">Accounts Overview</button>
+    <button class="subnav-item" data-nav="transfers" onclick="navTo('transfers',this)">Transfers &amp; Zelle®</button>
+    <button class="subnav-item" data-nav="billpay" onclick="navTo('billpay',this)">Bill Pay</button>
+    <button class="subnav-item" data-nav="services" onclick="navTo('services',this)">Card &amp; Account Services</button>
+    <button class="subnav-item" data-nav="rewards" onclick="navTo('rewards',this)">Rewards &amp; Deals</button>
+    <button class="subnav-item" data-nav="help" onclick="navTo('help',this)">Help &amp; Support</button>
+  </nav>
+
+  <!-- ─── BODY ─── -->
+  <div id="body">
+
+    <!-- ─── LEFT SIDEBAR ─── -->
+    <aside id="sidebar">
+      <div id="sidebar-content">
+        <div class="skel" style="height:16px;width:80%;margin:14px 16px 6px;"></div>
+        <div class="skel" style="height:44px;width:90%;margin:6px 16px;"></div>
+        <div class="skel" style="height:44px;width:90%;margin:6px 16px;"></div>
+      </div>
+
+      <!-- Demo customer selector -->
+      <div class="sidebar-demo-bar">
+        <div class="demo-label">Demo — View As Customer</div>
+        <select class="demo-select" id="customer-selector" onchange="switchCustomer(this.value)">
+          <option value="">Loading customers…</option>
+        </select>
+      </div>
+    </aside>
+
+    <!-- ─── MAIN CONTENT ─── -->
+    <div id="main-content">
+
+      <!-- ACCOUNTS OVERVIEW -->
+      <div class="view active" id="view-overview">
+        <h1 class="page-title">Accounts Overview</h1>
+        <p class="page-sub" id="overview-subtitle">Your accounts summary</p>
+        <div class="acct-cards-grid" id="overview-grid">
+          <div class="skel" style="height:140px;border-radius:6px;"></div>
+          <div class="skel" style="height:140px;border-radius:6px;"></div>
+          <div class="skel" style="height:140px;border-radius:6px;"></div>
+        </div>
+
+        <!-- Quick insights -->
+        <div style="margin-top:28px;">
+          <h2 class="card-title" style="margin-bottom:14px;font-size:16px;">Recent Activity</h2>
+          <div class="card">
+            <div class="card-body" id="overview-activity">
+              <div class="skel" style="height:180px;"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- CHECKING / SAVINGS ACCOUNT DETAIL -->
+      <div class="view" id="view-account">
+        <div id="account-hero-area"></div>
+        <div class="tabs" id="account-tabs">
+          <button class="tab-btn active" onclick="switchTab('tab-txns',this)">Transactions</button>
+          <button class="tab-btn" onclick="switchTab('tab-acct-info',this)">Account Info</button>
+          <button class="tab-btn" onclick="switchTab('tab-acct-services',this)">Services</button>
+        </div>
+        <div class="tab-panel active" id="tab-txns">
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">Recent Transactions</span>
+              <a href="#" style="font-size:12px;" onclick="return false;">View All</a>
+            </div>
+            <div class="card-body" style="padding:0;">
+              <table class="txn-table" style="width:100%;" id="acct-txn-table">
+                <thead><tr>
+                  <th>Date</th><th>Description</th><th>Category</th><th class="text-right">Amount</th><th class="text-right">Balance</th>
+                </tr></thead>
+                <tbody id="acct-txn-body"><tr><td colspan="5" style="text-align:center;padding:32px;color:#999;">Loading…</td></tr></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        <div class="tab-panel" id="tab-acct-info">
+          <div class="card card-body" id="acct-info-panel"></div>
+        </div>
+        <div class="tab-panel" id="tab-acct-services">
+          <div class="feature-grid" style="max-width:100%;margin:0;">
+            <div class="feature-card"><div class="feature-card-icon">📤</div><div class="feature-card-title">Transfer Money</div><div class="feature-card-sub">Move funds between accounts</div></div>
+            <div class="feature-card"><div class="feature-card-icon">📋</div><div class="feature-card-title">Order Checks</div><div class="feature-card-sub">Personal or business checks</div></div>
+            <div class="feature-card"><div class="feature-card-icon">🔒</div><div class="feature-card-title">Freeze Account</div><div class="feature-card-sub">Temporarily lock your account</div></div>
+            <div class="feature-card"><div class="feature-card-icon">📊</div><div class="feature-card-title">Statements</div><div class="feature-card-sub">View &amp; download statements</div></div>
+            <div class="feature-card"><div class="feature-card-icon">🔔</div><div class="feature-card-title">Alerts</div><div class="feature-card-sub">Manage account notifications</div></div>
+            <div class="feature-card"><div class="feature-card-icon">📞</div><div class="feature-card-title">Contact Us</div><div class="feature-card-sub">Speak with a specialist</div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- CREDIT CARD DETAIL (fully functional) -->
+      <div class="view" id="view-credit-card">
+        <div id="cc-content"></div>
+      </div>
+
+      <!-- FIXED DEPOSIT DETAIL (fully functional) -->
+      <div class="view" id="view-deposit">
+        <div id="fd-content"></div>
+      </div>
+
+      <!-- TRANSFERS (placeholder) -->
+      <div class="view" id="view-transfers">
+        <h1 class="page-title">Transfers &amp; Zelle®</h1>
+        <div class="placeholder-hero">
+          <div class="placeholder-icon">💸</div>
+          <div class="placeholder-title">Move Money Securely</div>
+          <div class="placeholder-sub">Transfer funds between your Bank of America accounts or send money instantly with Zelle® to friends and family.</div>
+          <div class="flex" style="gap:10px;justify-content:center;margin-bottom:28px;">
+            <button class="btn btn-red">Transfer Between Accounts</button>
+            <button class="btn btn-outline">Send with Zelle®</button>
+          </div>
+          <div class="feature-grid">
+            <div class="feature-card"><div class="feature-card-icon">🏦</div><div class="feature-card-title">Internal Transfer</div><div class="feature-card-sub">Between your BofA accounts</div></div>
+            <div class="feature-card"><div class="feature-card-icon">⚡</div><div class="feature-card-title">Zelle® Transfer</div><div class="feature-card-sub">Send &amp; receive in minutes</div></div>
+            <div class="feature-card"><div class="feature-card-icon">🌐</div><div class="feature-card-title">Wire Transfer</div><div class="feature-card-sub">Domestic &amp; international</div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- BILL PAY (placeholder) -->
+      <div class="view" id="view-billpay">
+        <h1 class="page-title">Bill Pay</h1>
+        <div class="placeholder-hero">
+          <div class="placeholder-icon">📄</div>
+          <div class="placeholder-title">Pay Your Bills On Time</div>
+          <div class="placeholder-sub">Schedule one-time or recurring payments. Pay anyone in the U.S. — from utilities to individuals.</div>
+          <button class="btn btn-red" style="margin-bottom:28px;">Add a Payee</button>
+          <div class="feature-grid">
+            <div class="feature-card"><div class="feature-card-icon">🔁</div><div class="feature-card-title">Auto-Pay</div><div class="feature-card-sub">Set recurring payments</div></div>
+            <div class="feature-card"><div class="feature-card-icon">📅</div><div class="feature-card-title">Schedule</div><div class="feature-card-sub">Future-date your payments</div></div>
+            <div class="feature-card"><div class="feature-card-icon">📜</div><div class="feature-card-title">Payment History</div><div class="feature-card-sub">View past bill payments</div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- CARD & ACCOUNT SERVICES (placeholder) -->
+      <div class="view" id="view-services">
+        <h1 class="page-title">Card &amp; Account Services</h1>
+        <div class="feature-grid" style="margin-top:20px;max-width:100%;">
+          <div class="feature-card" onclick="openSvcModal('lock')"><div class="feature-card-icon">🔒</div><div class="feature-card-title">Lock / Unlock Card</div><div class="feature-card-sub">Temporarily block card usage</div></div>
+          <div class="feature-card" onclick="openSvcModal('replace')"><div class="feature-card-icon">🔄</div><div class="feature-card-title">Replace Card</div><div class="feature-card-sub">Report lost or damaged card</div></div>
+          <div class="feature-card" onclick="openSvcModal('cli')"><div class="feature-card-icon">📊</div><div class="feature-card-title">Credit Line Increase</div><div class="feature-card-sub">Request a higher credit limit</div></div>
+          <div class="feature-card" onclick="openSvcModal('dispute')"><div class="feature-card-icon">🏷</div><div class="feature-card-title">Dispute a Charge</div><div class="feature-card-sub">Report unauthorized transactions</div></div>
+          <div class="feature-card" onclick="openSvcModal('authuser')"><div class="feature-card-icon">➕</div><div class="feature-card-title">Add Authorized User</div><div class="feature-card-sub">Manage additional cardholders</div></div>
+          <div class="feature-card" onclick="openSvcModal('paperless')"><div class="feature-card-icon">📧</div><div class="feature-card-title">Paperless Statements</div><div class="feature-card-sub">Go green with e-statements</div></div>
+          <div class="feature-card" onclick="openSvcModal('alerts')"><div class="feature-card-icon">🔔</div><div class="feature-card-title">Account Alerts</div><div class="feature-card-sub">Custom payment reminders</div></div>
+          <div class="feature-card" onclick="openSvcModal('wallet')"><div class="feature-card-icon">📱</div><div class="feature-card-title">Digital Wallet</div><div class="feature-card-sub">Apple Pay &amp; Google Pay</div></div>
+          <div class="feature-card" onclick="openSvcModal('pin')"><div class="feature-card-icon">💳</div><div class="feature-card-title">PIN Management</div><div class="feature-card-sub">Change or reset your PIN</div></div>
+        </div>
+      </div>
+
+      <!-- REWARDS -->
+      <div class="view" id="view-rewards">
+        <h1 class="page-title">Rewards &amp; Deals</h1>
+        <div class="placeholder-hero">
+          <div class="placeholder-icon">⭐</div>
+          <div class="placeholder-title">Your Rewards</div>
+          <div class="placeholder-sub">Earn cash back, travel points, and access exclusive Bank of America deals tailored to your spending.</div>
+          <div class="feature-grid">
+            <div class="feature-card"><div class="feature-card-icon">💰</div><div class="feature-card-title">Cash Back</div><div class="feature-card-sub">Earn 3% on your category</div></div>
+            <div class="feature-card"><div class="feature-card-icon">✈️</div><div class="feature-card-title">Travel Rewards</div><div class="feature-card-sub">1.5 points per $1 spent</div></div>
+            <div class="feature-card"><div class="feature-card-icon">🏪</div><div class="feature-card-title">BankAmeriDeals</div><div class="feature-card-sub">Cash back at local merchants</div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- HELP -->
+      <div class="view" id="view-help">
+        <h1 class="page-title">Help &amp; Support</h1>
+        <div class="placeholder-hero">
+          <div class="placeholder-icon">🎧</div>
+          <div class="placeholder-title">How Can We Help?</div>
+          <div class="placeholder-sub">Get answers, speak with a specialist, or find a nearby financial center.</div>
+          <div class="flex" style="gap:10px;justify-content:center;margin-bottom:28px;">
+            <button class="btn btn-red">Chat with Erica®</button>
+            <button class="btn btn-outline">Call 1-800-432-1000</button>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /main-content -->
+  </div><!-- /body -->
+</div><!-- /app -->
+
+<!-- ─── MAKE PAYMENT MODAL ─── -->
+<div class="modal-overlay" id="modal-payment">
+  <div class="modal-box">
+    <div class="modal-header">
+      <span class="modal-title">Make a Payment</span>
+      <button class="modal-close" onclick="closeModal('modal-payment')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="alert alert-info" style="margin-bottom:16px;">
+        Payments made before 5:00 PM ET post the same business day.
+      </div>
+      <div class="form-group" style="margin-bottom:14px;">
+        <label>Payment Account</label>
+        <select id="pay-from-acct">
+          <option>Loading…</option>
+        </select>
+      </div>
+      <div class="form-group" style="margin-bottom:14px;">
+        <label>Payment Amount</label>
+        <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
+          <button class="btn btn-ghost btn-sm" id="pay-min-btn" onclick="setPayAmount('min')">Min. Payment</button>
+          <button class="btn btn-ghost btn-sm" id="pay-stmt-btn" onclick="setPayAmount('stmt')">Statement Balance</button>
+          <button class="btn btn-ghost btn-sm" onclick="setPayAmount('full')">Current Balance</button>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span style="font-size:18px;color:#666;">$</span>
+          <input type="number" id="pay-amount" placeholder="0.00" step="0.01" min="0" style="font-size:18px;font-weight:700;" />
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Payment Date</label>
+        <input type="date" id="pay-date" />
+      </div>
+      <div id="pay-result" style="display:none;" class="alert alert-success mt-8">Payment submitted successfully!</div>
+      <div id="pay-error"  style="display:none;" class="alert alert-danger mt-8"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-payment')">Cancel</button>
+      <button class="btn btn-red" onclick="submitPayment()">Schedule Payment</button>
+    </div>
+  </div>
+</div>
+
+<!-- ─── BLOCK CARD MODAL ─── -->
+<div class="modal-overlay" id="modal-block">
+  <div class="modal-box">
+    <div class="modal-header">
+      <span class="modal-title" id="block-modal-title">Lock Card</span>
+      <button class="modal-close" onclick="closeModal('modal-block')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="alert alert-warn" id="block-modal-alert">Locking your card will immediately prevent any new purchases or cash advances.</div>
+      <div class="form-group" style="margin-top:14px;">
+        <label>Reason</label>
+        <select id="block-reason-select" onchange="updateBlockReason()">
+          <option value="Lost card — reported missing">Lost — card is missing</option>
+          <option value="Stolen card — unauthorized use suspected">Stolen — unauthorized use suspected</option>
+          <option value="Suspicious activity — security precaution">Suspicious activity detected</option>
+          <option value="Temporary lock — traveling abroad">Temporary lock (traveling)</option>
+          <option value="Damaged card — replacement requested">Card damaged</option>
+        </select>
+      </div>
+      <div id="block-result" style="display:none;" class="alert alert-success mt-8">Card has been locked successfully.</div>
+      <div id="block-error"  style="display:none;" class="alert alert-danger mt-8"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-block')">Cancel</button>
+      <button class="btn btn-red" id="block-confirm-btn" onclick="confirmBlock()">Lock This Card</button>
+    </div>
+  </div>
+</div>
+
+<!-- ─── CARD & ACCOUNT SERVICES MODALS ─── -->
+
+<!-- 1. Lock / Unlock Card -->
+<div class="modal-overlay" id="modal-cs-lock">
+  <div class="modal-box">
+    <div class="modal-header">
+      <span class="modal-title">🔒 Lock / Unlock Card</span>
+      <button class="modal-close" onclick="closeModal('modal-cs-lock')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group" style="margin-bottom:14px;">
+        <label>Select Card</label>
+        <select id="cs-lock-card" onchange="updateLockModalState()" style="padding:8px 10px;font-size:13px;width:100%;"></select>
+      </div>
+      <div id="cs-lock-info" class="alert alert-warn" style="margin-bottom:12px;">Locking will immediately prevent new purchases, cash advances, and ATM withdrawals.</div>
+      <div id="cs-lock-reason-row" class="form-group" style="margin-bottom:14px;">
+        <label>Lock Reason</label>
+        <select id="cs-lock-reason" style="padding:8px 10px;font-size:13px;width:100%;">
+          <option value="Lost card — reported missing">Lost Card</option>
+          <option value="Stolen card — unauthorized use suspected">Stolen / Unauthorized Use</option>
+          <option value="Suspicious activity — security precaution">Suspicious Activity</option>
+          <option value="Temporary lock — traveling abroad">Traveling (temp lock)</option>
+        </select>
+      </div>
+      <div id="cs-lock-result" style="display:none;" class="alert alert-success mt-8"></div>
+      <div id="cs-lock-error"  style="display:none;" class="alert alert-danger mt-8"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-cs-lock')">Cancel</button>
+      <button class="btn btn-red" id="cs-lock-btn" onclick="svcLockSubmit()">🔒 Lock Card</button>
+    </div>
+  </div>
+</div>
+
+<!-- 2. Replace Card -->
+<div class="modal-overlay" id="modal-cs-replace">
+  <div class="modal-box">
+    <div class="modal-header">
+      <span class="modal-title">🔄 Replace Card</span>
+      <button class="modal-close" onclick="closeModal('modal-cs-replace')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="alert alert-info" style="margin-bottom:14px;">A replacement card will be mailed to your address on file within 5–7 business days. Your current card remains active until the new card is activated.</div>
+      <div class="form-group" style="margin-bottom:14px;">
+        <label>Select Card</label>
+        <select id="cs-replace-card" style="padding:8px 10px;font-size:13px;width:100%;"></select>
+      </div>
+      <div class="form-group" style="margin-bottom:14px;">
+        <label>Reason for Replacement</label>
+        <select id="cs-replace-reason" style="padding:8px 10px;font-size:13px;width:100%;">
+          <option value="Lost">Lost Card</option>
+          <option value="Stolen">Stolen Card</option>
+          <option value="Damaged">Damaged / Worn Card</option>
+          <option value="Never Received">Never Received</option>
+        </select>
+      </div>
+      <div id="cs-replace-result" style="display:none;" class="alert alert-success mt-8"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-cs-replace')">Cancel</button>
+      <button class="btn btn-red" onclick="svcReplaceSubmit()">Request Replacement</button>
+    </div>
+  </div>
+</div>
+
+<!-- 3. Credit Line Increase -->
+<div class="modal-overlay" id="modal-cs-cli">
+  <div class="modal-box">
+    <div class="modal-header">
+      <span class="modal-title">📊 Credit Line Increase</span>
+      <button class="modal-close" onclick="closeModal('modal-cs-cli')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group" style="margin-bottom:14px;">
+        <label>Select Card</label>
+        <select id="cs-cli-card" style="padding:8px 10px;font-size:13px;width:100%;"></select>
+      </div>
+      <div class="form-group" style="margin-bottom:14px;">
+        <label>Requested Credit Limit ($)</label>
+        <input type="number" id="cs-cli-amount" placeholder="e.g. 15000" min="1000" step="500" style="padding:8px 10px;font-size:13px;width:100%;" />
+      </div>
+      <div class="form-group" style="margin-bottom:14px;">
+        <label>Annual Income ($)</label>
+        <input type="number" id="cs-cli-income" placeholder="e.g. 75000" min="0" style="padding:8px 10px;font-size:13px;width:100%;" />
+      </div>
+      <div class="form-group" style="margin-bottom:14px;">
+        <label>Employment Status</label>
+        <select id="cs-cli-employment" style="padding:8px 10px;font-size:13px;width:100%;">
+          <option>Full-time Employed</option>
+          <option>Part-time Employed</option>
+          <option>Self-employed</option>
+          <option>Retired</option>
+          <option>Other</option>
+        </select>
+      </div>
+      <div id="cs-cli-result" style="display:none;" class="alert alert-success mt-8"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-cs-cli')">Cancel</button>
+      <button class="btn btn-red" onclick="svcCLISubmit()">Submit Request</button>
+    </div>
+  </div>
+</div>
+
+<!-- 4. Dispute a Charge -->
+<div class="modal-overlay" id="modal-cs-dispute">
+  <div class="modal-box" style="width:540px;">
+    <div class="modal-header">
+      <span class="modal-title">🏷 Dispute a Charge</span>
+      <button class="modal-close" onclick="closeModal('modal-cs-dispute')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group" style="margin-bottom:14px;">
+        <label>Select Card</label>
+        <select id="cs-dispute-card" onchange="loadSvcDisputeTxns()" style="padding:8px 10px;font-size:13px;width:100%;"></select>
+      </div>
+      <div class="form-group" style="margin-bottom:14px;">
+        <label>Select Transaction</label>
+        <select id="cs-dispute-txn" style="padding:8px 10px;font-size:13px;width:100%;"><option>Select a card first…</option></select>
+      </div>
+      <div class="form-group" style="margin-bottom:14px;">
+        <label>Dispute Reason</label>
+        <select id="cs-dispute-type" style="padding:8px 10px;font-size:13px;width:100%;">
+          <option value="unauthorized">I did not make this purchase</option>
+          <option value="different_amount">The amount charged was different</option>
+          <option value="duplicate">Duplicate charge</option>
+          <option value="not_received">Goods/services not received</option>
+          <option value="cancelled">Subscription/service cancelled</option>
+        </select>
+      </div>
+      <div class="form-group" style="margin-bottom:14px;">
+        <label>Description</label>
+        <textarea id="cs-dispute-reason" rows="3" placeholder="Describe the issue in detail…"
+          style="padding:8px 10px;font-size:13px;border:1px solid #e0e0e0;border-radius:4px;width:100%;font-family:inherit;resize:vertical;"></textarea>
+      </div>
+      <div id="cs-dispute-result" style="display:none;" class="alert alert-success mt-8"></div>
+      <div id="cs-dispute-error"  style="display:none;" class="alert alert-danger mt-8"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-cs-dispute')">Cancel</button>
+      <button class="btn btn-red" onclick="svcDisputeSubmit()">Submit Dispute</button>
+    </div>
+  </div>
+</div>
+
+<!-- 5. Add Authorized User -->
+<div class="modal-overlay" id="modal-cs-authuser">
+  <div class="modal-box">
+    <div class="modal-header">
+      <span class="modal-title">➕ Add Authorized User</span>
+      <button class="modal-close" onclick="closeModal('modal-cs-authuser')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="alert alert-info" style="margin-bottom:14px;">Authorized users receive their own card and can make purchases. You remain responsible for all charges.</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;">
+        <div class="form-group">
+          <label>First Name</label>
+          <input type="text" id="cs-au-first" placeholder="First name" style="padding:8px 10px;font-size:13px;width:100%;" />
+        </div>
+        <div class="form-group">
+          <label>Last Name</label>
+          <input type="text" id="cs-au-last" placeholder="Last name" style="padding:8px 10px;font-size:13px;width:100%;" />
+        </div>
+      </div>
+      <div class="form-group" style="margin-bottom:14px;">
+        <label>Relationship</label>
+        <select id="cs-au-rel" style="padding:8px 10px;font-size:13px;width:100%;">
+          <option>Spouse / Domestic Partner</option>
+          <option>Child</option>
+          <option>Parent</option>
+          <option>Sibling</option>
+          <option>Other Family Member</option>
+          <option>Employee</option>
+        </select>
+      </div>
+      <div class="form-group" style="margin-bottom:14px;">
+        <label>Date of Birth</label>
+        <input type="date" id="cs-au-dob" style="padding:8px 10px;font-size:13px;width:100%;" />
+      </div>
+      <div id="cs-authuser-result" style="display:none;" class="alert alert-success mt-8"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-cs-authuser')">Cancel</button>
+      <button class="btn btn-red" onclick="svcAuthUserSubmit()">Add User</button>
+    </div>
+  </div>
+</div>
+
+<!-- 6. Paperless Statements -->
+<div class="modal-overlay" id="modal-cs-paperless">
+  <div class="modal-box">
+    <div class="modal-header">
+      <span class="modal-title">📧 Paperless Statements</span>
+      <button class="modal-close" onclick="closeModal('modal-cs-paperless')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="alert alert-info" style="margin-bottom:16px;">Go green and get instant access to statements online. You'll receive an email notification when each statement is ready.</div>
+      <div style="margin-bottom:16px;">
+        <label style="display:flex;align-items:flex-start;gap:10px;margin-bottom:12px;cursor:pointer;font-size:14px;">
+          <input type="radio" name="cs-paperless-opt" value="on" checked style="margin-top:3px;width:15px;height:15px;" />
+          <span><strong>Enroll in Paperless</strong> — Statements delivered electronically</span>
+        </label>
+        <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;font-size:14px;">
+          <input type="radio" name="cs-paperless-opt" value="off" style="margin-top:3px;width:15px;height:15px;" />
+          <span>Continue receiving Paper Statements by mail</span>
+        </label>
+      </div>
+      <div class="form-group" style="margin-bottom:14px;">
+        <label>Email for Statement Notifications</label>
+        <input type="email" id="cs-paperless-email" value="lakshmeesh777@gmail.com" style="padding:8px 10px;font-size:13px;width:100%;" />
+      </div>
+      <div id="cs-paperless-result" style="display:none;" class="alert alert-success mt-8"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-cs-paperless')">Cancel</button>
+      <button class="btn btn-red" onclick="svcPaperlessSubmit()">Save Preferences</button>
+    </div>
+  </div>
+</div>
+
+<!-- 7. Account Alerts -->
+<div class="modal-overlay" id="modal-cs-alerts">
+  <div class="modal-box">
+    <div class="modal-header">
+      <span class="modal-title">🔔 Account Alerts</span>
+      <button class="modal-close" onclick="closeModal('modal-cs-alerts')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div style="margin-bottom:16px;">
+        <div style="font-weight:700;font-size:13px;color:#012169;margin-bottom:10px;text-transform:uppercase;letter-spacing:.04em;">Alert Types</div>
+        <label style="display:flex;align-items:center;gap:8px;margin-bottom:9px;font-size:14px;cursor:pointer;"><input type="checkbox" checked /> Payment Due Reminder (7 days before)</label>
+        <label style="display:flex;align-items:center;gap:8px;margin-bottom:9px;font-size:14px;cursor:pointer;"><input type="checkbox" checked /> Transaction Over $100</label>
+        <label style="display:flex;align-items:center;gap:8px;margin-bottom:9px;font-size:14px;cursor:pointer;"><input type="checkbox" /> International Transaction</label>
+        <label style="display:flex;align-items:center;gap:8px;margin-bottom:9px;font-size:14px;cursor:pointer;"><input type="checkbox" checked /> Statement Ready</label>
+        <label style="display:flex;align-items:center;gap:8px;margin-bottom:9px;font-size:14px;cursor:pointer;"><input type="checkbox" /> Credit Limit Reached (90%)</label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer;"><input type="checkbox" checked /> Suspicious Activity Detected</label>
+      </div>
+      <div style="margin-bottom:14px;">
+        <div style="font-weight:700;font-size:13px;color:#012169;margin-bottom:10px;text-transform:uppercase;letter-spacing:.04em;">Delivery Method</div>
+        <label style="display:flex;align-items:center;gap:8px;margin-bottom:9px;font-size:14px;cursor:pointer;"><input type="checkbox" checked /> Email (lakshmeesh777@gmail.com)</label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer;"><input type="checkbox" checked /> Text / SMS</label>
+      </div>
+      <div id="cs-alerts-result" style="display:none;" class="alert alert-success mt-8"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-cs-alerts')">Cancel</button>
+      <button class="btn btn-red" onclick="svcAlertsSubmit()">Save Alert Settings</button>
+    </div>
+  </div>
+</div>
+
+<!-- 8. Digital Wallet -->
+<div class="modal-overlay" id="modal-cs-wallet">
+  <div class="modal-box">
+    <div class="modal-header">
+      <span class="modal-title">📱 Digital Wallet</span>
+      <button class="modal-close" onclick="closeModal('modal-cs-wallet')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="alert alert-info" style="margin-bottom:16px;">Add your Bank of America card to Apple Pay or Google Pay for fast, secure contactless payments.</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+        <div class="card" style="padding:20px;text-align:center;border-radius:6px;box-shadow:0 1px 4px rgba(0,0,0,.1);">
+          <div style="font-size:32px;margin-bottom:8px;">🍎</div>
+          <div style="font-weight:700;color:#012169;margin-bottom:6px;">Apple Pay</div>
+          <div style="font-size:12px;color:#666;margin-bottom:14px;">Pay with Face ID, Touch ID, or passcode</div>
+          <button class="btn btn-navy" style="width:100%;" onclick="svcWalletAction('apple')">Add to Apple Pay</button>
+        </div>
+        <div class="card" style="padding:20px;text-align:center;border-radius:6px;box-shadow:0 1px 4px rgba(0,0,0,.1);">
+          <div style="font-size:32px;margin-bottom:8px;">🤖</div>
+          <div style="font-weight:700;color:#012169;margin-bottom:6px;">Google Pay</div>
+          <div style="font-size:12px;color:#666;margin-bottom:14px;">Pay with your Android device securely</div>
+          <button class="btn btn-navy" style="width:100%;" onclick="svcWalletAction('google')">Add to Google Pay</button>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-cs-wallet')">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- 9. PIN Management -->
+<div class="modal-overlay" id="modal-cs-pin">
+  <div class="modal-box">
+    <div class="modal-header">
+      <span class="modal-title">💳 PIN Management</span>
+      <button class="modal-close" onclick="closeModal('modal-cs-pin')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group" style="margin-bottom:14px;">
+        <label>Select Card</label>
+        <select id="cs-pin-card" style="padding:8px 10px;font-size:13px;width:100%;"></select>
+      </div>
+      <div class="form-group" style="margin-bottom:12px;">
+        <label>Current PIN</label>
+        <input type="password" id="cs-pin-current" placeholder="Enter current PIN" maxlength="6" style="padding:8px 10px;font-size:14px;font-family:monospace;letter-spacing:.2em;width:100%;" />
+      </div>
+      <div class="form-group" style="margin-bottom:12px;">
+        <label>New PIN</label>
+        <input type="password" id="cs-pin-new" placeholder="4–6 digits" maxlength="6" style="padding:8px 10px;font-size:14px;font-family:monospace;letter-spacing:.2em;width:100%;" />
+      </div>
+      <div class="form-group" style="margin-bottom:14px;">
+        <label>Confirm New PIN</label>
+        <input type="password" id="cs-pin-confirm" placeholder="Re-enter new PIN" maxlength="6" style="padding:8px 10px;font-size:14px;font-family:monospace;letter-spacing:.2em;width:100%;" />
+      </div>
+      <div id="cs-pin-result" style="display:none;" class="alert alert-success mt-8"></div>
+      <div id="cs-pin-error"  style="display:none;" class="alert alert-danger mt-8"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-cs-pin')">Cancel</button>
+      <button class="btn btn-navy" onclick="svcPINSubmit()">Change PIN</button>
+    </div>
+  </div>
+</div>
+
+<!-- ─── TOAST ─── -->
+<div id="toast" style="position:fixed;bottom:24px;right:24px;background:#1A1A1A;color:#fff;padding:12px 20px;border-radius:6px;font-size:13px;box-shadow:0 4px 16px rgba(0,0,0,.3);display:none;z-index:200;max-width:340px;"></div>
+
+<script src="/app.js"></script>
+</body>
+</html>

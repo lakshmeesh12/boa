@@ -1,0 +1,575 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AQE — Autonomous Quality Engineering</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; overflow: hidden; }
+    body { font-family: 'Inter', system-ui, sans-serif; background: #f8fafc; color: #0f172a; font-size: 14px; }
+    .mono { font-family: 'JetBrains Mono', monospace !important; }
+    .fade { animation: fadeIn .18s ease; }
+    @keyframes fadeIn { from { opacity:0; transform:translateY(4px) } to { opacity:1; transform:none } }
+    @keyframes pulse-dot { 0%,100%{opacity:1} 50%{opacity:.4} }
+    .pulse { animation: pulse-dot 1.5s ease-in-out infinite; }
+    @keyframes spin { to { transform: rotate(360deg) } }
+    .spin { animation: spin .9s linear infinite; }
+
+    /* Scrollbars */
+    ::-webkit-scrollbar { width:5px; height:5px }
+    ::-webkit-scrollbar-track { background:transparent }
+    ::-webkit-scrollbar-thumb { background:#cbd5e1; border-radius:9px }
+    ::-webkit-scrollbar-thumb:hover { background:#94a3b8 }
+
+    /* Layout */
+    #shell { display:flex; flex-direction:column; height:100vh; }
+    #topbar { flex-shrink:0; height:52px; background:#fff; border-bottom:1px solid #e2e8f0; display:flex; align-items:center; padding:0 20px; gap:16px; box-shadow:0 1px 3px rgba(0,0,0,.05); z-index:40; }
+    #content { flex:1; overflow:hidden; display:flex; position:relative; }
+    .view { position:absolute; inset:0; overflow:hidden; display:none; }
+    .view.active { display:flex; flex-direction:column; }
+
+    /* Nav */
+    .nav-link { padding:5px 11px; border-radius:7px; font-size:13px; font-weight:500; cursor:pointer; color:#64748b; border:none; background:none; white-space:nowrap; transition:color .12s, background .12s; }
+    .nav-link:hover { color:#0f172a; background:#f1f5f9; }
+    .nav-link.active { color:#059669; background:#ecfdf5; font-weight:600; }
+
+    /* Cards */
+    .card { background:#fff; border:1px solid #e2e8f0; border-radius:12px; box-shadow:0 1px 3px rgba(0,0,0,.05); }
+    .card-flat { background:#fff; border:1px solid #e2e8f0; border-radius:8px; }
+
+    /* Buttons */
+    .btn { display:inline-flex; align-items:center; justify-content:center; gap:6px; padding:8px 16px; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer; border:none; transition:all .15s; white-space:nowrap; }
+    .btn-sm { padding:5px 11px; font-size:12px; border-radius:6px; }
+    .btn-green  { background:#10b981; color:#fff; }
+    .btn-green:hover  { background:#059669; }
+    .btn-red    { background:#ef4444; color:#fff; }
+    .btn-red:hover    { background:#dc2626; }
+    .btn-outline{ background:#fff; border:1px solid #e2e8f0; color:#475569; }
+    .btn-outline:hover{ border-color:#10b981; color:#059669; background:#f0fdf9; }
+    .btn-ghost  { background:transparent; border:1px solid #e2e8f0; color:#64748b; }
+    .btn-ghost:hover  { color:#374151; border-color:#94a3b8; }
+
+    /* Pills */
+    .pill { display:inline-flex; align-items:center; padding:2px 8px; border-radius:20px; font-size:11px; font-weight:600; letter-spacing:.02em; }
+    .p-green  { background:#dcfce7; color:#15803d; }
+    .p-red    { background:#fee2e2; color:#b91c1c; }
+    .p-amber  { background:#fef3c7; color:#b45309; }
+    .p-blue   { background:#dbeafe; color:#1d4ed8; }
+    .p-violet { background:#ede9fe; color:#6d28d9; }
+    .p-slate  { background:#f1f5f9; color:#475569; }
+
+    /* Form controls */
+    input, select, textarea { background:#fff; border:1px solid #e2e8f0; color:#0f172a; border-radius:8px; padding:8px 11px; font-size:13px; font-family:inherit; outline:none; transition:border-color .15s, box-shadow .15s; width:100%; }
+    input:focus, select:focus, textarea:focus { border-color:#10b981; box-shadow:0 0 0 3px rgba(16,185,129,.12); }
+    input::placeholder, textarea::placeholder { color:#94a3b8; }
+
+    /* Terminal */
+    .term { background:#0d1117; color:#e6edf3; font-family:'JetBrains Mono',monospace; font-size:11.5px; line-height:1.7; padding:12px 14px; overflow-y:auto; }
+    .term .t-pass { color:#3fb950; }
+    .term .t-fail { color:#f85149; }
+    .term .t-warn { color:#d29922; }
+    .term .t-info { color:#79c0ff; }
+    .term .t-dim  { color:#484f58; }
+
+    /* Status dot */
+    .dot { width:7px; height:7px; border-radius:50%; flex-shrink:0; }
+    .dot-green { background:#10b981; }
+    .dot-red   { background:#ef4444; }
+    .dot-amber { background:#f59e0b; }
+    .dot-gray  { background:#94a3b8; }
+
+    /* Module checkbox cards */
+    .mod-card { border:1px solid #e2e8f0; border-radius:8px; padding:10px 12px; cursor:pointer; transition:all .12s; display:flex; align-items:center; gap:8px; }
+    .mod-card:hover  { border-color:#10b981; background:#f0fdf9; }
+    .mod-card.sel    { border-color:#10b981; background:#ecfdf5; }
+    .mod-card input  { width:auto; padding:0; border:none; }
+
+    /* Progress */
+    .prog-track { height:6px; background:#f1f5f9; border-radius:3px; overflow:hidden; }
+    .prog-fill  { height:100%; border-radius:3px; transition:width .4s ease; }
+
+    /* Right panel states */
+    .rp-state { display:none; }
+    .rp-state.rp-active { display:flex; flex-direction:column; height:100%; }
+
+    /* Table */
+    .tbl th { padding:9px 14px; font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.06em; color:#94a3b8; background:#f8fafc; border-bottom:1px solid #e2e8f0; text-align:left; }
+    .tbl td { padding:11px 14px; border-bottom:1px solid #f8fafc; vertical-align:middle; }
+    .tbl tr:last-child td { border-bottom:none; }
+    .tbl tr:hover td { background:#fafafa; cursor:pointer; }
+
+    /* Drag zone */
+    .drop-z { border:2px dashed #cbd5e1; border-radius:10px; padding:20px; text-align:center; cursor:pointer; transition:all .15s; background:#f8fafc; }
+    .drop-z:hover, .drop-z.over { border-color:#10b981; background:#f0fdf9; }
+
+    /* Skeleton */
+    .skel { background:linear-gradient(90deg,#f1f5f9 25%,#e8edf2 50%,#f1f5f9 75%); background-size:300% 100%; animation:skel-anim 1.3s infinite; border-radius:6px; }
+    @keyframes skel-anim { 0%{background-position:100%} 100%{background-position:-100%} }
+
+    /* Glow for active stat */
+    .kpi-glow { box-shadow:0 0 0 4px rgba(16,185,129,.12); }
+  </style>
+</head>
+<body>
+<div id="shell">
+
+  <!-- ──────────────────── TOP BAR ──────────────────── -->
+  <header id="topbar">
+    <!-- Logo -->
+    <div style="display:flex;align-items:center;gap:10px;flex-shrink:0;">
+      <div style="width:32px;height:32px;border-radius:8px;background:linear-gradient(135deg,#10b981,#047857);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:13px;">AQ</div>
+      <div>
+        <div style="font-weight:700;font-size:13px;color:#0f172a;line-height:1.2;">Autonomous QE</div>
+        <div class="mono" style="font-size:10px;color:#94a3b8;line-height:1.2;">Banking Test Platform</div>
+      </div>
+    </div>
+
+    <!-- Divider -->
+    <div style="width:1px;height:24px;background:#e2e8f0;flex-shrink:0;"></div>
+
+    <!-- Nav -->
+    <nav id="main-nav" style="display:flex;gap:2px;">
+      <button class="nav-link" data-view="dashboard">Dashboard</button>
+      <button class="nav-link" data-view="run-tests">Run Tests</button>
+      <button class="nav-link" data-view="reports">Reports</button>
+      <button class="nav-link" data-view="graphrag">GraphRAG</button>
+      <button class="nav-link" data-view="settings">Settings</button>
+    </nav>
+
+    <!-- Spacer -->
+    <div style="flex:1;"></div>
+
+    <!-- Status -->
+    <div style="display:flex;align-items:center;gap:16px;">
+      <div style="display:flex;align-items:center;gap:6px;">
+        <span class="dot dot-gray" id="dot-target"></span>
+        <span style="font-size:12px;color:#64748b;">Target</span>
+        <span class="mono" style="font-size:11px;color:#94a3b8;" id="lbl-target">—</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px;">
+        <span class="dot dot-gray" id="dot-aqe"></span>
+        <span style="font-size:12px;color:#64748b;">AQE</span>
+        <span class="mono" style="font-size:11px;color:#94a3b8;" id="lbl-aqe">—</span>
+      </div>
+      <button class="btn btn-sm btn-green" onclick="navigateTo('run-tests')">+ Run Tests</button>
+    </div>
+  </header>
+
+  <!-- ──────────────────── MAIN ──────────────────── -->
+  <div id="content">
+
+    <!-- ═══════════ DASHBOARD ═══════════ -->
+    <div class="view" id="view-dashboard">
+      <div style="flex:1;overflow-y:auto;padding:24px;display:flex;flex-direction:column;gap:20px;">
+
+        <!-- Header -->
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;">
+          <div>
+            <h1 style="font-size:22px;font-weight:800;color:#0f172a;">Quality Engineering Dashboard</h1>
+            <p style="color:#64748b;margin-top:2px;font-size:13px;">Live view of all AQE activity against the Core Banking Simulator</p>
+          </div>
+          <button class="btn btn-outline btn-sm" onclick="loadDashboard()">↻ Refresh</button>
+        </div>
+
+        <!-- Health banner -->
+        <div class="card" style="padding:14px 20px;display:flex;align-items:center;gap:24px;flex-wrap:wrap;">
+          <span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#94a3b8;">System Health</span>
+          <div style="display:flex;align-items:center;gap:6px;font-size:13px;" id="hlt-aqe"><span class="dot dot-gray"></span>AQE API</div>
+          <div style="display:flex;align-items:center;gap:6px;font-size:13px;" id="hlt-target"><span class="dot dot-gray"></span>Target API :8000</div>
+          <div style="display:flex;align-items:center;gap:6px;font-size:13px;" id="hlt-qdrant"><span class="dot dot-gray"></span>Qdrant :6333</div>
+          <div style="display:flex;align-items:center;gap:6px;font-size:13px;" id="hlt-neo4j"><span class="dot dot-gray"></span>Neo4j :7687</div>
+          <div style="margin-left:auto;font-size:11px;color:#94a3b8;" id="hlt-ts">—</div>
+        </div>
+
+        <!-- KPI row -->
+        <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:14px;">
+          <div class="card" style="padding:18px 20px;">
+            <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:#94a3b8;margin-bottom:8px;">Total Sessions</div>
+            <div style="font-size:32px;font-weight:800;color:#0f172a;line-height:1;" id="k-total">—</div>
+            <div style="font-size:11px;color:#94a3b8;margin-top:4px;" id="k-total-sub">—</div>
+          </div>
+          <div class="card" style="padding:18px 20px;">
+            <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:#94a3b8;margin-bottom:8px;">Completed</div>
+            <div style="font-size:32px;font-weight:800;color:#10b981;line-height:1;" id="k-completed">—</div>
+          </div>
+          <div class="card" style="padding:18px 20px;">
+            <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:#94a3b8;margin-bottom:8px;">Active Now</div>
+            <div style="font-size:32px;font-weight:800;color:#3b82f6;line-height:1;" id="k-active">—</div>
+          </div>
+          <div class="card" style="padding:18px 20px;">
+            <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:#94a3b8;margin-bottom:8px;">Tests Run (total)</div>
+            <div style="font-size:32px;font-weight:800;color:#8b5cf6;line-height:1;" id="k-tests">—</div>
+          </div>
+          <div class="card" style="padding:18px 20px;">
+            <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:#94a3b8;margin-bottom:8px;">Log Vectors</div>
+            <div style="font-size:32px;font-weight:800;color:#f59e0b;line-height:1;" id="k-vectors">—</div>
+            <div style="font-size:10px;color:#94a3b8;margin-top:2px;">Qdrant</div>
+          </div>
+        </div>
+
+        <!-- Sessions + Reports -->
+        <div style="display:grid;grid-template-columns:1fr 2fr;gap:16px;min-height:0;">
+
+          <!-- Active sessions -->
+          <div class="card" style="display:flex;flex-direction:column;overflow:hidden;">
+            <div style="padding:14px 18px;border-bottom:1px solid #f1f5f9;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">
+              <span style="font-weight:700;font-size:13px;">Active Sessions</span>
+              <span class="pill p-blue" id="active-badge">0</span>
+            </div>
+            <div id="active-list" style="flex:1;overflow-y:auto;padding:12px 14px;">
+              <div style="color:#94a3b8;font-size:13px;text-align:center;padding:24px;">No active sessions</div>
+            </div>
+            <div style="padding:12px 14px;border-top:1px solid #f1f5f9;flex-shrink:0;">
+              <button class="btn btn-green btn-sm" style="width:100%;" onclick="navigateTo('run-tests')">+ Start New Test Session</button>
+            </div>
+          </div>
+
+          <!-- Recent reports -->
+          <div class="card" style="display:flex;flex-direction:column;overflow:hidden;">
+            <div style="padding:14px 18px;border-bottom:1px solid #f1f5f9;flex-shrink:0;">
+              <span style="font-weight:700;font-size:13px;">Recent Reports</span>
+            </div>
+            <div style="flex:1;overflow-y:auto;">
+              <table class="tbl" style="width:100%;border-collapse:collapse;">
+                <thead><tr>
+                  <th>Session</th><th>Pass Rate</th><th>Total</th><th>Duration</th><th>Date</th><th></th>
+                </tr></thead>
+                <tbody id="dash-reports"></tbody>
+              </table>
+              <div id="dash-reports-empty" style="display:none;text-align:center;padding:32px;color:#94a3b8;font-size:13px;">No reports yet — run a test session first.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════ RUN TESTS (split panel) ═══════════ -->
+    <div class="view" id="view-run-tests">
+      <!-- Split layout: left config, right live panel -->
+      <div style="display:grid;grid-template-columns:340px 1fr;height:100%;overflow:hidden;">
+
+        <!-- ── LEFT: Configuration ── -->
+        <div style="border-right:1px solid #e2e8f0;display:flex;flex-direction:column;overflow:hidden;background:#fff;">
+          <div style="padding:16px 18px;border-bottom:1px solid #f1f5f9;flex-shrink:0;">
+            <div style="font-weight:800;font-size:15px;color:#0f172a;">Configure Session</div>
+            <div style="font-size:12px;color:#94a3b8;margin-top:2px;">Select modules, set test type, then generate a plan</div>
+          </div>
+
+          <div style="flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:14px;">
+            <!-- Name -->
+            <div>
+              <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#64748b;display:block;margin-bottom:5px;">Session Name</label>
+              <input id="s-name" placeholder="e.g. Sprint 42 regression" />
+            </div>
+
+            <!-- Modules -->
+            <div>
+              <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#64748b;display:block;margin-bottom:5px;">Modules to Test</label>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;" id="mod-grid">
+                <div class="mod-card sel" data-mod="Customers" onclick="toggleMod(this)">
+                  <span style="font-size:16px;">👥</span>
+                  <div><div style="font-size:12px;font-weight:600;">Customers</div><div style="font-size:10px;color:#94a3b8;">KYC · Portfolio</div></div>
+                </div>
+                <div class="mod-card sel" data-mod="Accounts" onclick="toggleMod(this)">
+                  <span style="font-size:16px;">🏦</span>
+                  <div><div style="font-size:12px;font-weight:600;">Accounts</div><div style="font-size:10px;color:#94a3b8;">Statement · Balance</div></div>
+                </div>
+                <div class="mod-card sel" data-mod="CreditCards" onclick="toggleMod(this)">
+                  <span style="font-size:16px;">💳</span>
+                  <div><div style="font-size:12px;font-weight:600;">Credit Cards</div><div style="font-size:10px;color:#94a3b8;">Block · Limits</div></div>
+                </div>
+                <div class="mod-card sel" data-mod="Deposits" onclick="toggleMod(this)">
+                  <span style="font-size:16px;">📈</span>
+                  <div><div style="font-size:12px;font-weight:600;">Deposits</div><div style="font-size:10px;color:#94a3b8;">FD · Maturity</div></div>
+                </div>
+                <div class="mod-card sel" data-mod="Transactions" onclick="toggleMod(this)">
+                  <span style="font-size:16px;">⚡</span>
+                  <div><div style="font-size:12px;font-weight:600;">Transactions</div><div style="font-size:10px;color:#94a3b8;">Atomic · Ledger</div></div>
+                </div>
+                <div class="mod-card" data-mod="UI" onclick="toggleMod(this)">
+                  <span style="font-size:16px;">🖥</span>
+                  <div><div style="font-size:12px;font-weight:600;">UI</div><div style="font-size:10px;color:#94a3b8;">Computer Use</div></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Test type -->
+            <div>
+              <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#64748b;display:block;margin-bottom:5px;">Test Type</label>
+              <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;padding:5px 10px;border:1px solid #e2e8f0;border-radius:6px;"><input type="radio" name="ttype" value="All" checked style="width:auto;padding:0;border:none;" /> All</label>
+                <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;padding:5px 10px;border:1px solid #e2e8f0;border-radius:6px;"><input type="radio" name="ttype" value="Functional" style="width:auto;padding:0;border:none;" /> Functional</label>
+                <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;padding:5px 10px;border:1px solid #e2e8f0;border-radius:6px;"><input type="radio" name="ttype" value="EdgeCase" style="width:auto;padding:0;border:none;" /> Edge Cases</label>
+                <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;padding:5px 10px;border:1px solid #e2e8f0;border-radius:6px;"><input type="radio" name="ttype" value="Security" style="width:auto;padding:0;border:none;" /> Security</label>
+              </div>
+            </div>
+
+            <!-- Script upload -->
+            <div>
+              <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#64748b;display:block;margin-bottom:5px;">Upload Scripts <span style="font-weight:400;text-transform:none;color:#94a3b8;">(optional)</span></label>
+              <div class="drop-z" id="drop-z" onclick="document.getElementById('file-up').click();">
+                <div style="font-size:20px;color:#cbd5e1;margin-bottom:4px;">↑</div>
+                <div style="font-size:12px;font-weight:600;color:#64748b;">.sh · .py · .feature</div>
+                <div style="font-size:11px;color:#94a3b8;">Drag & drop or click to browse</div>
+              </div>
+              <input type="file" id="file-up" multiple accept=".sh,.bash,.py,.feature" style="display:none" />
+              <div id="scripts-list" style="margin-top:6px;display:flex;flex-direction:column;gap:4px;"></div>
+            </div>
+
+            <div id="cfg-error" style="display:none;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:10px;font-size:12px;color:#dc2626;"></div>
+          </div>
+
+          <!-- Generate button -->
+          <div style="padding:14px 16px;border-top:1px solid #f1f5f9;flex-shrink:0;">
+            <button class="btn btn-green" style="width:100%;padding:11px;" id="gen-btn" onclick="generatePlan()">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+              Generate Plan with Claude
+            </button>
+          </div>
+        </div>
+
+        <!-- ── RIGHT: Live panel ── -->
+        <div style="display:flex;flex-direction:column;overflow:hidden;background:#f8fafc;" id="right-panel">
+
+          <!-- State: IDLE -->
+          <div class="rp-state rp-active" id="rp-idle">
+            <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px;text-align:center;">
+              <div style="width:64px;height:64px;background:#ecfdf5;border-radius:16px;display:flex;align-items:center;justify-content:center;font-size:28px;margin-bottom:16px;">🤖</div>
+              <h2 style="font-size:18px;font-weight:700;color:#0f172a;">Ready to run tests</h2>
+              <p style="color:#64748b;margin-top:6px;max-width:340px;line-height:1.5;">Select the modules you want to test on the left, then click <strong>Generate Plan</strong> — Claude will design a comprehensive test plan in seconds.</p>
+              <div style="margin-top:32px;width:100%;max-width:420px;">
+                <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#94a3b8;margin-bottom:10px;text-align:left;">Recent Sessions</div>
+                <div id="idle-sessions" style="display:flex;flex-direction:column;gap:6px;"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- State: PLANNING -->
+          <div class="rp-state" id="rp-planning">
+            <div style="padding:16px 20px;border-bottom:1px solid #e2e8f0;display:flex;align-items:center;gap:10px;background:#fff;flex-shrink:0;">
+              <div class="spin" style="width:16px;height:16px;border:2px solid #e2e8f0;border-top-color:#10b981;border-radius:50%;"></div>
+              <span style="font-weight:700;font-size:14px;">Claude is building your test plan…</span>
+              <span style="margin-left:auto;font-size:12px;color:#94a3b8;" id="plan-elapsed">0s</span>
+            </div>
+            <div style="flex:1;overflow-y:auto;padding:16px;" id="plan-agent-log">
+              <div style="font-size:12px;color:#64748b;text-align:center;padding:20px;">Waiting for Discovery Agent to start…</div>
+            </div>
+          </div>
+
+          <!-- State: PLAN READY -->
+          <div class="rp-state" id="rp-plan">
+            <div style="padding:14px 20px;border-bottom:1px solid #e2e8f0;background:#fff;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;">
+              <div>
+                <div style="font-weight:700;font-size:14px;color:#0f172a;">Test Plan Ready</div>
+                <div style="font-size:12px;color:#64748b;" id="plan-case-count">— test cases</div>
+              </div>
+              <span class="pill p-green">READY FOR REVIEW</span>
+            </div>
+            <div style="flex:1;overflow:hidden;display:flex;flex-direction:column;">
+              <!-- AI summary -->
+              <div style="padding:14px 20px;background:#f0fdf9;border-bottom:1px solid #d1fae5;flex-shrink:0;">
+                <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#059669;margin-bottom:4px;">AI Analysis</div>
+                <p style="font-size:13px;color:#065f46;line-height:1.5;" id="plan-summary">—</p>
+              </div>
+              <!-- Plan items -->
+              <div style="flex:1;overflow-y:auto;padding:12px 16px;display:flex;flex-direction:column;gap:6px;" id="plan-items"></div>
+            </div>
+            <!-- Approve row -->
+            <div style="padding:14px 16px;border-top:1px solid #e2e8f0;background:#fff;flex-shrink:0;display:flex;gap:8px;flex-direction:column;">
+              <!-- Chat with AI -->
+              <div style="display:flex;gap:6px;">
+                <input id="plan-q" placeholder="Ask AI about this plan…" style="font-size:12px;" onkeydown="if(event.key==='Enter')sendPlanQ()" />
+                <button class="btn btn-ghost btn-sm" onclick="sendPlanQ()">Ask</button>
+              </div>
+              <div id="plan-qa" style="display:none;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px;font-size:12px;color:#374151;max-height:80px;overflow-y:auto;"></div>
+              <div style="display:flex;gap:8px;">
+                <button class="btn btn-green" style="flex:1;padding:10px;" onclick="approveAndRun()">✓ Approve &amp; Execute</button>
+                <button class="btn btn-red btn-sm" onclick="rejectPlan()">✗ Reject</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- State: EXECUTING -->
+          <div class="rp-state" id="rp-exec">
+            <!-- Header -->
+            <div style="padding:12px 18px;border-bottom:1px solid #e2e8f0;background:#fff;flex-shrink:0;display:flex;align-items:center;gap:12px;">
+              <div class="pulse dot dot-green"></div>
+              <span style="font-weight:700;font-size:13px;color:#0f172a;">Running Tests</span>
+              <span class="pill p-blue" id="exec-state-pill">EXECUTING</span>
+              <span style="margin-left:auto;font-size:12px;color:#94a3b8;font-family:'JetBrains Mono',monospace;" id="exec-timer">00:00</span>
+            </div>
+
+            <!-- Progress -->
+            <div style="padding:10px 18px;background:#fff;border-bottom:1px solid #f1f5f9;flex-shrink:0;">
+              <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:5px;">
+                <span style="color:#64748b;" id="exec-prog-lbl">0 of 0</span>
+                <div style="display:flex;gap:12px;">
+                  <span style="color:#10b981;font-weight:600;"><span id="exec-passed">0</span> pass</span>
+                  <span style="color:#ef4444;font-weight:600;"><span id="exec-failed">0</span> fail</span>
+                  <span style="color:#f59e0b;font-weight:600;"><span id="exec-errors">0</span> err</span>
+                </div>
+              </div>
+              <div class="prog-track">
+                <div class="prog-fill" id="exec-prog-bar" style="width:0%;background:linear-gradient(90deg,#10b981,#059669);"></div>
+              </div>
+            </div>
+
+            <!-- Clarification -->
+            <div id="clarif-panel" style="display:none;background:#fffbeb;border-bottom:2px solid #fcd34d;padding:12px 18px;flex-shrink:0;">
+              <div style="font-weight:700;font-size:12px;color:#92400e;margin-bottom:4px;">⏸ Agent needs your input</div>
+              <div style="font-size:13px;color:#78350f;margin-bottom:8px;" id="clarif-q">…</div>
+              <div style="display:flex;gap:6px;">
+                <input id="clarif-ans" placeholder="Your answer…" style="font-size:12px;background:#fff;" onkeydown="if(event.key==='Enter')sendClarif()" />
+                <button class="btn btn-green btn-sm" onclick="sendClarif()">Send →</button>
+              </div>
+            </div>
+
+            <!-- Terminal split -->
+            <div style="flex:1;overflow:hidden;display:grid;grid-template-rows:1fr 1fr;">
+              <!-- Agent log (top) -->
+              <div style="display:flex;flex-direction:column;border-bottom:1px solid #1c2333;overflow:hidden;">
+                <div style="background:#161b22;padding:6px 12px;display:flex;align-items:center;gap:6px;flex-shrink:0;">
+                  <div class="dot" style="background:#f97316;width:9px;height:9px;"></div>
+                  <span style="font-size:10px;font-weight:600;color:#8b949e;text-transform:uppercase;letter-spacing:.06em;">Agent Activity</span>
+                </div>
+                <div class="term" id="agent-log" style="flex:1;overflow-y:auto;"></div>
+              </div>
+              <!-- Test output (bottom) -->
+              <div style="display:flex;flex-direction:column;overflow:hidden;">
+                <div style="background:#161b22;padding:6px 12px;display:flex;align-items:center;gap:6px;justify-content:space-between;flex-shrink:0;">
+                  <div style="display:flex;align-items:center;gap:6px;">
+                    <div class="dot" style="background:#10b981;width:9px;height:9px;"></div>
+                    <span style="font-size:10px;font-weight:600;color:#8b949e;text-transform:uppercase;letter-spacing:.06em;">Test Output</span>
+                  </div>
+                  <button onclick="clrTerm()" style="font-size:10px;color:#484f58;background:none;border:none;cursor:pointer;font-weight:600;">CLEAR</button>
+                </div>
+                <div class="term" id="test-out" style="flex:1;overflow-y:auto;"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- State: DONE -->
+          <div class="rp-state" id="rp-done">
+            <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px;text-align:center;">
+              <div style="width:64px;height:64px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:28px;margin-bottom:16px;" id="done-icon" style="background:#dcfce7;">✓</div>
+              <h2 style="font-size:20px;font-weight:800;" id="done-title">Run Complete</h2>
+              <p style="color:#64748b;margin-top:6px;" id="done-subtitle">—</p>
+              <!-- Stats -->
+              <div style="display:flex;gap:20px;margin-top:24px;padding:16px 28px;background:#fff;border:1px solid #e2e8f0;border-radius:12px;">
+                <div style="text-align:center;"><div style="font-size:28px;font-weight:800;color:#10b981;" id="done-passed">—</div><div style="font-size:11px;color:#94a3b8;">PASSED</div></div>
+                <div style="width:1px;background:#f1f5f9;"></div>
+                <div style="text-align:center;"><div style="font-size:28px;font-weight:800;color:#ef4444;" id="done-failed">—</div><div style="font-size:11px;color:#94a3b8;">FAILED</div></div>
+                <div style="width:1px;background:#f1f5f9;"></div>
+                <div style="text-align:center;"><div style="font-size:28px;font-weight:800;color:#0f172a;" id="done-total">—</div><div style="font-size:11px;color:#94a3b8;">TOTAL</div></div>
+              </div>
+              <div style="display:flex;gap:10px;margin-top:20px;">
+                <button class="btn btn-green" onclick="openDoneReport()">📋 View Full Report</button>
+                <button class="btn btn-outline" onclick="resetToIdle()">+ New Session</button>
+              </div>
+            </div>
+          </div>
+
+        </div><!-- /right-panel -->
+      </div>
+    </div>
+
+    <!-- ═══════════ REPORTS ═══════════ -->
+    <div class="view" id="view-reports">
+      <div style="flex:1;overflow-y:auto;padding:24px;display:flex;flex-direction:column;gap:18px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;">
+          <div>
+            <h1 style="font-size:20px;font-weight:800;">Test Reports</h1>
+            <p style="font-size:13px;color:#64748b;margin-top:2px;">Completed runs with AI root-cause analysis</p>
+          </div>
+          <button class="btn btn-outline btn-sm" onclick="loadReports()">↻ Refresh</button>
+        </div>
+        <div class="card" style="overflow:hidden;">
+          <table class="tbl" style="width:100%;border-collapse:collapse;">
+            <thead><tr>
+              <th>Session</th><th>Pass Rate</th><th>Passed</th><th>Failed</th><th>Total</th><th>Duration</th><th>Date</th><th></th>
+            </tr></thead>
+            <tbody id="rpt-tbody"></tbody>
+          </table>
+          <div id="rpt-empty" style="display:none;padding:48px;text-align:center;">
+            <div style="font-size:40px;margin-bottom:12px;">📋</div>
+            <div style="font-weight:600;color:#374151;">No reports yet</div>
+            <p style="font-size:13px;color:#94a3b8;margin-top:4px;">Run a test session to generate your first report.</p>
+            <button class="btn btn-green" style="margin-top:14px;" onclick="navigateTo('run-tests')">+ Run Tests</button>
+          </div>
+        </div>
+        <div id="rpt-viewer" style="display:none;" class="card">
+          <div style="padding:12px 18px;border-bottom:1px solid #f1f5f9;display:flex;align-items:center;justify-content:space-between;background:#f8fafc;">
+            <span style="font-weight:700;font-size:13px;" id="rpt-viewer-title">Report</span>
+            <button class="btn btn-ghost btn-sm" onclick="document.getElementById('rpt-viewer').style.display='none'">✕ Close</button>
+          </div>
+          <iframe id="rpt-iframe" style="width:100%;height:560px;border:none;"></iframe>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════ GRAPHRAG ═══════════ -->
+    <div class="view" id="view-graphrag">
+      <div style="flex:1;overflow-y:auto;padding:24px;display:flex;flex-direction:column;gap:18px;">
+        <div>
+          <h1 style="font-size:20px;font-weight:800;">GraphRAG Intelligence</h1>
+          <p style="font-size:13px;color:#64748b;margin-top:2px;">Semantic search over ingested logs (Qdrant) · Module dependency graph (Neo4j)</p>
+        </div>
+        <div style="display:grid;grid-template-columns:380px 1fr;gap:18px;min-height:0;flex:1;">
+          <!-- Qdrant -->
+          <div style="display:flex;flex-direction:column;gap:14px;">
+            <div class="card" style="padding:18px;display:flex;flex-direction:column;gap:10px;">
+              <div style="font-weight:700;font-size:14px;">Semantic Log Search</div>
+              <p style="font-size:12px;color:#64748b;">Natural-language search over banking API logs embedded with text-embedding-3-large</p>
+              <div style="display:flex;gap:6px;">
+                <input id="q-query" placeholder="e.g. insufficient funds error…" onkeydown="if(event.key==='Enter')doSearch()" />
+                <button class="btn btn-green btn-sm" onclick="doSearch()">Search</button>
+              </div>
+              <div id="q-results" style="display:flex;flex-direction:column;gap:6px;max-height:300px;overflow-y:auto;"></div>
+            </div>
+            <div class="card" style="padding:16px;display:flex;align-items:center;justify-content:space-between;gap:10px;">
+              <div>
+                <div style="font-weight:600;font-size:13px;">Ingestion Status</div>
+                <div class="mono" style="font-size:11px;color:#64748b;margin-top:2px;" id="q-status">Loading…</div>
+              </div>
+              <button class="btn btn-outline btn-sm" onclick="triggerIngest()">↑ Ingest Now</button>
+            </div>
+          </div>
+          <!-- Neo4j graph -->
+          <div class="card" style="display:flex;flex-direction:column;overflow:hidden;">
+            <div style="padding:14px 18px;border-bottom:1px solid #f1f5f9;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">
+              <div>
+                <div style="font-weight:700;font-size:14px;">Module Dependency Graph</div>
+                <div style="font-size:12px;color:#64748b;margin-top:1px;">Neo4j DEPENDS_ON · drag nodes to explore</div>
+              </div>
+              <button class="btn btn-ghost btn-sm" onclick="loadGraph()">↻ Reload</button>
+            </div>
+            <div id="d3-box" style="flex:1;background:#f8fafc;overflow:hidden;"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════ SETTINGS ═══════════ -->
+    <div class="view" id="view-settings">
+      <div style="flex:1;overflow-y:auto;padding:24px;max-width:640px;">
+        <h1 style="font-size:20px;font-weight:800;margin-bottom:4px;">Settings</h1>
+        <p style="font-size:13px;color:#64748b;margin-bottom:20px;">Configuration loaded from root .env — edit the file to change values</p>
+        <div class="card" style="overflow:hidden;">
+          <div id="cfg-rows"></div>
+          <div style="padding:14px 18px;background:#fffbeb;border-top:1px solid #fde68a;">
+            <span style="font-size:12px;color:#92400e;">🔒 API keys are read from .env and never sent to the browser.</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /content -->
+</div><!-- /shell -->
+
+<script src="/app.js"></script>
+</body>
+</html>

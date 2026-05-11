@@ -1,0 +1,35 @@
+# ── AQE Platform dependencies ─────────────────────────────────────────
+# Core API
+fastapi==0.115.5
+uvicorn[standard]==0.32.1
+python-multipart==0.0.12
+python-dotenv==1.0.1
+pydantic==2.9.2
+aiofiles==24.1.0
+
+# HTTP client (async, for hitting Target Banking Simulator API)
+httpx==0.27.2
+
+# Anthropic (Claude agent brain)
+anthropic==0.49.0
+
+# OpenAI (embeddings via text-embedding-3-large)
+openai==1.59.6
+
+# Qdrant (vector store)
+qdrant-client==1.12.1
+
+# Neo4j (graph store)
+neo4j==5.27.0
+
+# Playwright (browser automation for Computer Use)
+playwright==1.49.0
+
+# WebSocket support for clients (server-side handled by uvicorn/fastapi)
+websockets==13.1
+
+# Structured logging
+python-json-logger==3.2.1
+
+# Reporting
+jinja2==3.1.5

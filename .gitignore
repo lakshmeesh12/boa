@@ -1,0 +1,52 @@
+# Secrets & local config
+.env
+.env.local
+*.env.local
+aqe/backend/.env
+backend/.env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+build/
+dist/
+
+# Node / frontend deps (if any are added later)
+node_modules/
+.next/
+.cache/
+
+# AQE runtime artifacts
+aqe/data/
+aqe/backend/data/
+aqe/backend/logs/
+*.log
+
+# Docker volumes (mounted host paths)
+mongo_data/
+bank_logs/
+
+# Playwright artifacts
+playwright-report/
+test-results/
+.playwright/
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Demo state
+demo_scripts/.last_push.json

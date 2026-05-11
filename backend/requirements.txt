@@ -1,0 +1,8 @@
+fastapi==0.115.5
+uvicorn[standard]==0.32.1
+motor==3.6.0
+pymongo==4.9.2
+pydantic==2.9.2
+python-dotenv==1.0.1
+faker==30.8.2
+python-multipart==0.0.12
