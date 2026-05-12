@@ -2,25 +2,26 @@
 # push_feature_credit_limit_increase.ps1
 #
 # Simulates a developer pushing a multi-file "feature" to the BOA target.
-# Every mutation is designed to be picked up by exactly one AQE category so
-# the resulting test run exercises the full pipeline:
+# Each mutation is designed to trigger exactly one AQE test category so the
+# resulting Smart/Full/NewOnly run exercises the full pipeline:
 #
-#   #1 New endpoint POST /credit-cards/{id}/limit-increase  -> API + Functional
+#   #1 New endpoint POST /credit-cards/{id}/limit-increase  -> API + Functional + Security
 #   #2 import os + os.system in dispute handler             -> Vulnerability (SAST)
 #   #3 _calculate_late_fee helper with off-by-one bug       -> Unit
 #   #4 await asyncio.sleep(0.5) in list_cards               -> Performance
 #   #5 requirements.txt: pin requests==2.20.0 (CVEs)        -> Vulnerability (SCA)
+#   #6 frontend index.html + app.js: Instant Limit Increase -> UI
+#      promo banner with a button that calls the new endpoint
 #
-# After mutating, commits, pushes to GitHub, and restarts docker.
-# Refuses to run on a dirty workspace.
-#
-# Revert with: demo_scripts\revert_to_baseline.ps1
+# Refuses to run on a dirty workspace. Use revert_to_baseline.ps1 between runs.
 # ============================================================================
 
 $RepoRoot   = Split-Path -Parent $PSScriptRoot
 $CcsPath    = Join-Path $RepoRoot "backend\routers\credit_card_services.py"
 $CcPath     = Join-Path $RepoRoot "backend\routers\credit_cards.py"
 $ReqsPath   = Join-Path $RepoRoot "backend\requirements.txt"
+$FeIndexPath= Join-Path $RepoRoot "frontend\index.html"
+$FeAppPath  = Join-Path $RepoRoot "frontend\app.js"
 
 Set-Location $RepoRoot
 Write-Host "Working directory: $RepoRoot" -ForegroundColor Cyan
@@ -38,7 +39,7 @@ function Fail($msg) {
     exit 1
 }
 
-# 0. Workspace must be clean (force revert before re-pushing)
+# 0. Workspace must be clean
 $dirty = git status --porcelain
 if ($dirty) {
     Write-Host "Workspace is dirty:" -ForegroundColor Red
@@ -47,7 +48,7 @@ if ($dirty) {
     Fail "Run demo_scripts\revert_to_baseline.ps1 first."
 }
 
-# 0b. Verify we are on the baseline (commit == aqe-demo-baseline)
+# 0b. Verify we are on the baseline
 $baselineSha = "$(git rev-parse aqe-demo-baseline 2>$null)".Trim()
 $headSha     = "$(git rev-parse HEAD 2>$null)".Trim()
 if (-not $baselineSha) { Fail "aqe-demo-baseline tag not found. Run setup_demo_repo.ps1." }
@@ -57,7 +58,7 @@ if ($headSha -ne $baselineSha) {
 }
 
 Write-Host ""
-Write-Host "Applying 5 mutations across 3 files..." -ForegroundColor Yellow
+Write-Host "Applying 6 mutations across 5 files..." -ForegroundColor Yellow
 
 # ---- Mutation #1, #2, #3 - credit_card_services.py ------------------------
 $ccs = Read-Utf8 $CcsPath
@@ -65,12 +66,10 @@ if (-not $ccs.Contains("from core.db import get_async_db")) {
     Fail "Anchor not found in credit_card_services.py (import block)."
 }
 
-# Insert `import os` once, just after `import random` (Mutation #2 prep)
 if (-not ($ccs -match "(?m)^import os\b")) {
     $ccs = $ccs -replace "(?m)^import random\b", "import os`r`nimport random"
 }
 
-# Inject helper function with off-by-one bug right after `log = get_logger(...)`
 $helperBlock = @'
 
 def _calculate_late_fee(days_overdue: int, daily_rate: float) -> float:
@@ -94,7 +93,6 @@ if ($ccs.Contains($logAnchor) -and -not $ccs.Contains("_calculate_late_fee")) {
     Fail "Anchor not found in credit_card_services.py (log = get_logger)."
 }
 
-# Append new POST /limit-increase endpoint at the end of the file (Mutation #1)
 $newEndpoint = @'
 
 # ---- feat: credit limit increase (added by demo push) ---------------------
@@ -126,8 +124,6 @@ if (-not $ccs.Contains("/limit-increase")) {
     $ccs = $ccs.TrimEnd() + "`r`n" + $newEndpoint + "`r`n"
 }
 
-# Mutation #2: inject os.system inside the dispute handler.
-# Find the dispute function and add an os.system line just inside the function body.
 $dispatchPattern = 'async def file_dispute'
 if ($ccs -match $dispatchPattern) {
     $injected = "os.system(f'echo dispute filed for {card_id}: {body.reason} >> /tmp/disputes.log')"
@@ -185,20 +181,92 @@ if (-not ($reqs -match "(?m)^requests==2\.20\.0\b")) {
 Write-Utf8 $ReqsPath $reqs
 Write-Host "  #5 applied to backend/requirements.txt" -ForegroundColor Green
 
+# ---- Mutation #6 - frontend Instant Limit Increase banner + handler -------
+$fe = Read-Utf8 $FeIndexPath
+$feAnchor = '<h1 class="page-title">Card &amp; Account Services</h1>'
+$feBanner = @'
+
+        <!-- NEW: Instant Limit Increase promotional banner (added by demo push) -->
+        <div id="ilim-banner" style="background:linear-gradient(135deg,#012169 0%,#1A3A8F 100%);color:#fff;padding:20px 24px;border-radius:8px;margin-bottom:24px;display:flex;align-items:center;gap:20px;">
+          <div style="font-size:36px;">&#9889;</div>
+          <div style="flex:1;">
+            <div style="font-size:18px;font-weight:700;margin-bottom:4px;">Instant Credit Limit Increase</div>
+            <div style="font-size:13px;opacity:.9;">Get an immediate decision on your new credit line. No credit check required for amounts under $5,000.</div>
+          </div>
+          <button id="btn-instant-limit-increase" onclick="instantLimitIncrease()" style="background:#fff;color:#012169;border:none;padding:11px 22px;border-radius:6px;font-weight:700;font-size:13px;cursor:pointer;">Request Now</button>
+        </div>
+
+'@
+if (-not $fe.Contains('id="ilim-banner"') -and $fe.Contains($feAnchor)) {
+    $fe = $fe.Replace($feAnchor, $feAnchor + "`r`n" + $feBanner)
+    Write-Utf8 $FeIndexPath $fe
+    Write-Host "  #6a applied to frontend/index.html" -ForegroundColor Green
+} else {
+    Write-Host "  (skipped #6a - banner already present or anchor not found)" -ForegroundColor DarkGray
+}
+
+$feApp = Read-Utf8 $FeAppPath
+if (-not $feApp.Contains("function instantLimitIncrease")) {
+    $handler = @'
+
+// Added by demo push: instant limit-increase widget on services page
+async function instantLimitIncrease() {
+  var btn = document.getElementById('btn-instant-limit-increase');
+  if (btn) { btn.disabled = true; btn.textContent = 'Processing...'; }
+  try {
+    var listResp = await fetch('/api/v1/credit-cards?status=ACTIVE&limit=1');
+    var listData = await listResp.json();
+    if (!listData.cards || !listData.cards.length) {
+      alert('No active cards found.');
+      if (btn) { btn.disabled = false; btn.textContent = 'Request Now'; }
+      return;
+    }
+    var cardId = listData.cards[0]._id || listData.cards[0].id;
+    var amount = parseFloat(prompt('Increase amount (USD):', '1000')) || 0;
+    if (!amount) {
+      if (btn) { btn.disabled = false; btn.textContent = 'Request Now'; }
+      return;
+    }
+    var resp = await fetch('/api/v1/credit-cards/' + cardId + '/limit-increase', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ delta_amount: amount, reason: 'instant request from services page' })
+    });
+    var data = await resp.json();
+    if (resp.ok) {
+      alert('Approved. New limit: $' + (data.new_limit || '?'));
+    } else {
+      alert('Request failed: ' + (data.detail || resp.status));
+    }
+  } catch (e) {
+    alert('Error: ' + e.message);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Request Now'; }
+  }
+}
+window.instantLimitIncrease = instantLimitIncrease;
+'@
+    $feApp = $feApp.TrimEnd() + "`r`n" + $handler + "`r`n"
+    Write-Utf8 $FeAppPath $feApp
+    Write-Host "  #6b applied to frontend/app.js" -ForegroundColor Green
+} else {
+    Write-Host "  (skipped #6b - handler already present)" -ForegroundColor DarkGray
+}
+
 # ---- Commit + push --------------------------------------------------------
 Write-Host ""
 Write-Host "Committing and pushing..." -ForegroundColor Yellow
-git add backend/routers/credit_card_services.py backend/routers/credit_cards.py backend/requirements.txt
+git add backend/routers/credit_card_services.py backend/routers/credit_cards.py backend/requirements.txt frontend/index.html frontend/app.js
 $diffStat = git diff --cached --shortstat
 Write-Host "  $diffStat" -ForegroundColor DarkGray
 
-git commit -m "feat: credit-limit-increase + late-fee helper (demo push)" | Out-Null
+git commit -m "feat: credit-limit-increase end-to-end (backend + frontend + ui)" | Out-Null
 if ($LASTEXITCODE -ne 0) { Fail "git commit failed" }
 
 git push origin main
 if ($LASTEXITCODE -ne 0) { Fail "git push origin main failed" }
 
-# ---- Restart docker services so the target picks up code changes ----------
+# ---- Restart docker so the target picks up code changes -------------------
 Write-Host ""
 Write-Host "Restarting docker services..." -ForegroundColor Yellow
 docker compose restart api ui
@@ -214,4 +282,4 @@ Write-Host "  Baseline:    $($baselineSha.Substring(0,12))" -ForegroundColor Gre
 Write-Host "  New HEAD:    $($newSha.Substring(0,12))" -ForegroundColor Green
 Write-Host "  Commit URL:  https://github.com/lakshmeesh12/boa/commit/$newSha" -ForegroundColor Green
 Write-Host ""
-Write-Host "Open AQE (http://localhost:5001) - the Changes banner should now show 3 files changed." -ForegroundColor Cyan
+Write-Host "Open AQE (http://localhost:5001) - the Changes banner should now show 5 files changed." -ForegroundColor Cyan

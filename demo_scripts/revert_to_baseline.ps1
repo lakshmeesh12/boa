@@ -30,13 +30,13 @@ if ($LASTEXITCODE -ne 0) { Write-Host "git clean failed" -ForegroundColor Red; e
 Write-Host "Force-pushing remote to baseline (safe: this is the demo repo only)..." -ForegroundColor Yellow
 git push --force-with-lease origin main
 if ($LASTEXITCODE -ne 0) {
-    Write-Host "  (push failed — likely already at baseline, or no network)" -ForegroundColor DarkYellow
+    Write-Host "  (push failed - likely already at baseline, or no network)" -ForegroundColor DarkYellow
 }
 
 Write-Host "Restarting docker services..." -ForegroundColor Yellow
 docker compose restart api ui
 if ($LASTEXITCODE -ne 0) {
-    Write-Host "  (docker restart failed — services may not be running)" -ForegroundColor DarkYellow
+    Write-Host "  (docker restart failed - services may not be running)" -ForegroundColor DarkYellow
 }
 
 # Verify clean state

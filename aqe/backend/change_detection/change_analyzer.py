@@ -61,8 +61,12 @@ You must output ONLY one JSON object — no prose before or after. Schema:
 Rules:
 - Be specific and reference actual lines/identifiers from the diff.
 - Choose risk_level by the worst single issue: any auth bypass / RCE / SQLi / negative-amount logic = critical.
-- Prefer 3-8 suggested_new_tests — quality over quantity.
-- Categories: Vulnerability = SAST/SCA findings, Header = HTTP security headers, Performance = latency/load, Unit = function-level isolation, API = HTTP endpoint, UI = browser interaction.
+- Produce 12-20 suggested_new_tests. This is enterprise QA - comprehensive coverage, not minimal sampling. Err on the side of more.
+- MANDATORY: include at least 2 UI tests with detailed ui_instruction. Even if the diff is backend-only, a banking endpoint is reachable from the customer portal, so UI must always be exercised end-to-end (login -> navigate -> click -> verify the new behaviour).
+- MANDATORY: include at least 1 test per applicable category. New endpoint -> API, Functional, Security, AND UI. Dependency change -> Vulnerability. Sleep/loop -> Performance. New helper function -> Unit.
+- For UI category tests, the ui_instruction MUST be 3-6 sentences describing exact browser steps a tester would take, referencing visible UI elements (button text, navigation labels, modal titles).
+- For API category tests, ALWAYS populate method/endpoint/payload/expected_status so the runner can execute them directly.
+- Categories: Vulnerability = SAST/SCA findings (no endpoint needed), Header = HTTP security headers (no endpoint needed), Performance = latency/load (no endpoint needed), Unit = function-level isolation (no endpoint needed), API = HTTP endpoint, Integration = multi-endpoint flow, UI = browser interaction with ui_instruction, Functional = happy-path verification, Security = auth/authz/injection.
 - Output ONLY the JSON object. No markdown fences, no preamble."""
 
 
@@ -202,7 +206,7 @@ class ChangeAnalyzer:
 
         response = _client.messages.create(
             model=settings.claude_model_sonnet,
-            max_tokens=4096,
+            max_tokens=8192,  # 12-20 suggested tests need the budget
             system=_SYSTEM_PROMPT,
             messages=[{"role": "user", "content": user_prompt}],
         )
