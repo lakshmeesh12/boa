@@ -5,8 +5,8 @@ from fastapi import APIRouter, HTTPException
 
 from core.logging_config import get_logger
 from models.schemas import (
-    ApproveRequest, ChangeContext, ClarifyRequest, CreateSessionRequest,
-    RejectRequest, Session,
+    ApproveRequest, BankingModule, ChangeContext, ClarifyRequest,
+    CreateSessionRequest, RejectRequest, Session,
 )
 from orchestrator import engine, session_store
 
@@ -29,6 +29,20 @@ async def create_session(body: CreateSessionRequest) -> dict:
     # has everything it needs. ChangeAnalyzer caches by HEAD SHA so this is fast
     # if the dashboard already showed the change banner.
     if body.use_change_context:
+        # Force UI module into the session — change-driven runs always include
+        # end-to-end browser verification regardless of what the caller selected.
+        # Use string comparison because session.modules may be enums OR strings
+        # depending on serialization context (Session uses use_enum_values=True).
+        existing_mod_values = {
+            (m.value if hasattr(m, "value") else str(m)) for m in session.modules
+        }
+        if BankingModule.UI.value not in existing_mod_values:
+            session.modules = list(session.modules) + [BankingModule.UI]
+            log.info(
+                "session.ui_module_forced",
+                context={"session": session.id, "modules": [str(m) for m in session.modules]},
+            )
+
         try:
             from change_detection import ChangeAnalyzer, GitWatcher
             watcher = GitWatcher()

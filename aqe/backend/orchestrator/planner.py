@@ -73,17 +73,33 @@ def _suggested_to_test_case(s: SuggestedTest, triggered_by: list[str]) -> TestCa
     )
 
 
-def _filter_impacted_builtins(builtin_cases: list[TestCase], affected_modules: list[str]) -> list[TestCase]:
-    """Smart mode: keep only built-in tests whose module appears in the diff's affected list."""
-    if not affected_modules:
-        return []
-    affected_set = {m.lower() for m in affected_modules}
-    impacted = []
+def _filter_impacted_builtins(
+    builtin_cases: list[TestCase],
+    affected_modules: list[str],
+    session_modules: list[BankingModule] | None = None,
+) -> list[TestCase]:
+    """Smart mode: keep tests whose module is impacted by the diff.
+
+    A test is impacted if EITHER:
+      (a) its module appears in Claude's modules_affected list, OR
+      (b) it's a UI test and UI is among the session's selected modules
+          (UI flows always need to be re-verified when ANY backend changes —
+           every banking endpoint can be reached from the customer portal).
+    """
+    affected_set = {m.lower() for m in (affected_modules or [])}
+    session_mods = session_modules or []
+    session_mod_values = {
+        (m.value if hasattr(m, "value") else str(m)).lower() for m in session_mods
+    }
+    ui_in_session = BankingModule.UI.value.lower() in session_mod_values
+
+    impacted: list[TestCase] = []
     for tc in builtin_cases:
-        # tc.module is a BankingModule (or its string value depending on serialization context)
-        mod_str = tc.module.value if hasattr(tc.module, "value") else str(tc.module)
-        if mod_str.lower() in affected_set:
+        mod_str = (tc.module.value if hasattr(tc.module, "value") else str(tc.module)).lower()
+        if mod_str in affected_set:
             impacted.append(tc)
+        elif ui_in_session and mod_str == BankingModule.UI.value.lower():
+            impacted.append(tc)  # UI tests always run if UI is selected
     return impacted
 
 
@@ -161,9 +177,15 @@ async def _generate_change_driven_plan(session: Session) -> Plan:
 
     elif plan_mode == PlanMode.SMART:
         builtin_all = get_all_cases(session.modules or [], TestType.ALL)
-        impacted = _filter_impacted_builtins(builtin_all, analysis.modules_affected)
+        impacted = _filter_impacted_builtins(
+            builtin_all, analysis.modules_affected, session.modules or [],
+        )
         for tc in impacted:
-            rationale_by_case[tc.id] = f"SMART: covers module impacted by diff"
+            mod_lower = (tc.module.value if hasattr(tc.module, "value") else str(tc.module)).lower()
+            if mod_lower == BankingModule.UI.value.lower():
+                rationale_by_case[tc.id] = "SMART: UI regression (always run on any change)"
+            else:
+                rationale_by_case[tc.id] = "SMART: covers module impacted by diff"
         for s, tc in zip(analysis.suggested_new_tests, new_cases):
             rationale_by_case[tc.id] = f"SMART (new): {s.rationale}"
         all_cases = impacted + new_cases

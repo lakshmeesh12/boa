@@ -28,6 +28,24 @@ _CACHE_DIR.mkdir(parents=True, exist_ok=True)
 # Bound how much diff context we send Claude — we already truncated per-file.
 _MAX_TOTAL_DIFF_CHARS = 60_000
 
+# Enterprise quality: if Claude returns fewer than this many tests, retry once
+# with a focused expansion prompt to fill out remaining categories.
+_MIN_TESTS_BEFORE_RETRY = 10
+_TARGET_TEST_COUNT = 14   # what we aim for after the retry
+
+
+_EXPANSION_PROMPT = """You previously analyzed this diff and produced N test suggestions:
+
+{prior_tests_summary}
+
+That is not enough. The original system prompt mandates 12-20 tests with comprehensive category coverage. Produce {needed} ADDITIONAL test suggestions that:
+
+- Fill gaps in categories not yet covered (especially UI, Vulnerability, Performance, Header, Unit, Integration if missing).
+- Do NOT duplicate the tests above.
+- Follow the same JSON schema (each test has: name, description, category, module, rationale, method, endpoint, payload, expected_status, ui_instruction).
+
+Output ONLY a JSON object with a single key `additional_tests` containing the list. No prose, no markdown fences."""
+
 _SYSTEM_PROMPT = """You are AQE's change-impact analyst.
 
 Given a unified diff of a target system (a banking application: FastAPI + MongoDB + nginx + HTML/JS frontend), produce a tight, accurate analysis of what changed and what testing is needed.
@@ -176,6 +194,45 @@ class ChangeAnalyzer:
             return None
         return f"{self.github_repo_url}/commit/{head_sha}"
 
+    async def _expand_tests(
+        self,
+        original_user_prompt: str,
+        analysis: ChangeAnalysis,
+        needed: int,
+        cs: ChangeSet,
+    ) -> list:
+        """Call Claude a second time asking for MORE tests in missing categories."""
+        prior_summary = "\n".join(
+            f"  {i+1}. [{t.category.value if hasattr(t.category, 'value') else t.category}] {t.name}"
+            for i, t in enumerate(analysis.suggested_new_tests)
+        ) or "  (none)"
+        expansion_user = (
+            original_user_prompt
+            + "\n\n---\nFollow-up:\n"
+            + _EXPANSION_PROMPT.format(
+                prior_tests_summary=prior_summary, needed=needed,
+            )
+        )
+        response = _client.messages.create(
+            model=settings.claude_model_sonnet,
+            max_tokens=6144,
+            system=_SYSTEM_PROMPT,
+            messages=[{"role": "user", "content": expansion_user}],
+        )
+        text = next((b.text for b in response.content if hasattr(b, "text")), "").strip()
+        text = _strip_json_fence(text)
+        try:
+            raw = json.loads(text)
+        except json.JSONDecodeError:
+            return []
+        additional_raw = raw.get("additional_tests") or raw.get("suggested_new_tests") or []
+        if not isinstance(additional_raw, list):
+            return []
+        # Reuse the same coercion as the primary pass
+        wrapper = {"suggested_new_tests": additional_raw}
+        coerced = _coerce_to_analysis(wrapper, self._commit_url(cs.head_sha))
+        return coerced.suggested_new_tests
+
     async def analyze(self, cs: ChangeSet, *, use_cache: bool = True) -> ChangeAnalysis:
         """Analyze the given ChangeSet, returning a ChangeAnalysis.
 
@@ -229,6 +286,63 @@ class ChangeAnalyzer:
             )
 
         analysis = _coerce_to_analysis(raw, self._commit_url(cs.head_sha))
+
+        # ─── ROBUSTNESS PASS 1: Expansion if Claude underestimated ──────────
+        # If Claude returned fewer than _MIN_TESTS_BEFORE_RETRY, do ONE focused
+        # retry asking for additional tests. This is the guard rail that turns
+        # the prompt's "12-20" from aspirational into actual.
+        if len(analysis.suggested_new_tests) < _MIN_TESTS_BEFORE_RETRY:
+            needed = _TARGET_TEST_COUNT - len(analysis.suggested_new_tests)
+            log.warning(
+                "change_analyzer.expansion_needed",
+                context={
+                    "first_pass": len(analysis.suggested_new_tests),
+                    "requesting_additional": needed,
+                },
+            )
+            try:
+                more = await self._expand_tests(user_prompt, analysis, needed, cs)
+                if more:
+                    analysis.suggested_new_tests = analysis.suggested_new_tests + more
+                    log.info(
+                        "change_analyzer.expansion_done",
+                        context={
+                            "total_after_expand": len(analysis.suggested_new_tests),
+                        },
+                    )
+            except Exception as exc:
+                log.warning("change_analyzer.expansion_failed", context={"error": str(exc)})
+
+        # ─── ROBUSTNESS PASS 2: Synthesize UI fallback if Claude missed it ──
+        # Even with the MANDATORY-UI rule in the prompt, Claude sometimes omits
+        # UI tests when the diff is backend-only. Belt-and-suspenders: inject
+        # a baseline "verify customer portal still loads after this change" UI
+        # scenario so the UIAgent always exercises the browser path.
+        has_ui = any(
+            (t.category.value if hasattr(t.category, "value") else str(t.category)) == TestCategory.UI.value
+            for t in analysis.suggested_new_tests
+        )
+        if not has_ui:
+            from models.schemas import SuggestedTest, BankingModule as _BM
+            log.info("change_analyzer.synthesizing_ui_fallback")
+            module_for_fallback = (
+                _BM.CREDIT_CARDS
+                if "CreditCards" in (analysis.modules_affected or [])
+                else _BM.UI
+            )
+            analysis.suggested_new_tests.append(SuggestedTest(
+                name="Customer portal smoke test after change",
+                description="Verify the BOA customer portal still loads and the dashboard renders after this code change.",
+                category=TestCategory.UI,
+                module=module_for_fallback,
+                rationale="Synthesized fallback — Claude did not propose a UI test, but every backend change can affect customer-facing flows.",
+                ui_instruction=(
+                    "Navigate to the customer portal home page. Verify the page loads without errors. "
+                    "Click into the Accounts Overview tab and confirm the account summary renders. "
+                    "Navigate to the Card & Account Services tab and confirm the feature grid is visible. "
+                    "Report PASSED if no JavaScript errors, blank screens, or 5xx responses are observed."
+                ),
+            ))
 
         try:
             cache_file.write_text(analysis.model_dump_json(indent=2), encoding="utf-8")

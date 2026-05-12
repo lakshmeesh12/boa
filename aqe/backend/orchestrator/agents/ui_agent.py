@@ -84,21 +84,49 @@ class UIAgent:
         """Forward CDP screencast frames to the session WebSocket."""
         await emit_ui_frame(self.session_id, frame_b64)
 
-    async def run_all_scenarios(self) -> list[TestResult]:
-        """Run all 6 UI scenarios using Claude Computer Use, streaming live frames."""
+    async def run_all_scenarios(
+        self, extra_scenarios: list[dict] | None = None,
+    ) -> list[TestResult]:
+        """Run hardcoded baseline UI scenarios + any change-driven extras.
+
+        `extra_scenarios` is a list of {"name": str, "instruction": str} dicts —
+        typically Claude-generated UI scenarios from the change-driven plan.
+        These run AFTER the baseline scenarios so the demo always shows the
+        baseline cards/dashboard interactions before the change-specific ones.
+        """
+        await self._emit(f"[UIAgent] Booting browser at {settings.target_ui_url}")
         await pr.start_browser()
         await pr.navigate(settings.target_ui_url)
         await pr.login_if_required(settings.target_ui_username, settings.target_ui_password)
+
         # Start CDP screencast — frames flow to the live canvas in the session tab.
-        await pr.start_screencast(self._frame_to_event_bus)
-        results = []
+        await self._emit("[UIAgent] Starting CDP screencast for live streaming")
         try:
-            for scenario in _UI_SCENARIOS:
+            await pr.start_screencast(self._frame_to_event_bus)
+        except Exception as exc:
+            await self._emit(
+                f"[UIAgent] Screencast failed to start: {exc}. Tests still run; live video disabled.",
+                level="WARNING",
+            )
+
+        scenarios: list[dict] = list(_UI_SCENARIOS)
+        if extra_scenarios:
+            scenarios.extend(extra_scenarios)
+            await self._emit(
+                f"[UIAgent] Added {len(extra_scenarios)} change-driven scenario(s) from plan"
+            )
+        await self._emit(f"[UIAgent] Will run {len(scenarios)} UI scenario(s) total")
+
+        results: list[TestResult] = []
+        try:
+            for i, scenario in enumerate(scenarios, start=1):
+                await self._emit(f"[UIAgent] ({i}/{len(scenarios)}) {scenario['name']}")
                 result = await self._run_scenario(scenario["name"], scenario["instruction"])
                 results.append(result)
                 await emit_test_result(self.session_id, result.model_dump(mode="json"))
         finally:
-            await pr.stop_browser()  # also stops screencast
+            await self._emit("[UIAgent] Closing browser + stopping screencast")
+            await pr.stop_browser()
         return results
 
     async def _run_scenario(self, name: str, instruction: str) -> TestResult:

@@ -22,7 +22,18 @@ logging.getLogger("neo4j.notifications").setLevel(logging.WARNING)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    log.info("aqe.starting", context={"port": settings.aqe_api_port})
+    from datetime import datetime, timezone
+    started_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    log.info("aqe.starting", context={"port": settings.aqe_api_port, "started_at": started_at})
+    # IMPORTANT operational reminder — Python doesn't hot-reload .py changes.
+    # If you edit AQE code, you must Ctrl+C this process and `python start.py` again.
+    log.warning(
+        "aqe.hot_reload_disabled",
+        context={
+            "started_at": started_at,
+            "note": "Python changes require process restart. Use Ctrl+C + python start.py to pick up edits.",
+        },
+    )
     # GraphRAG init
     from graphrag import neo4j_engine, qdrant_engine, log_ingestion
     await qdrant_engine.ensure_collection()

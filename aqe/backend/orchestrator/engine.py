@@ -119,7 +119,7 @@ async def _execute(session: Session) -> None:
         await _run_header_tests(session)
         await _run_api_tests(session)
         await _run_perf_tests(session)
-        if BankingModule.UI in session.modules:
+        if _should_run_ui_tests(session):
             await _run_ui_tests(session)
         await _run_script_tests(session)
         await _analyse_and_report(session)
@@ -251,15 +251,99 @@ async def _run_api_tests(session: Session) -> None:
     await agent.run_suite(api_cases, on_result=_on_result)
 
 
+def _should_run_ui_tests(session: Session) -> bool:
+    """Robust check: run UI tests if ANY of these are true.
+
+    1. UI module is selected (string OR enum comparison)
+    2. The plan has any TestCase with category == UI
+    3. Session is change-driven (always re-verify the customer-facing flow)
+    """
+    # (1) String-tolerant module check
+    ui_value = BankingModule.UI.value
+    for m in session.modules:
+        mod_str = m.value if hasattr(m, "value") else str(m)
+        if mod_str == ui_value:
+            return True
+
+    # (2) Any UI category in the plan?
+    if session.plan:
+        ui_cat_value = TestCategory.UI.value
+        for item in session.plan.items:
+            cat = item.test_case.category
+            cat_val = cat.value if hasattr(cat, "value") else str(cat)
+            if cat_val == ui_cat_value:
+                return True
+
+    # (3) Change-driven session — always exercise UI end-to-end
+    if session.change_context is not None:
+        return True
+
+    return False
+
+
+def _extract_ui_extras_from_plan(session: Session) -> list[dict]:
+    """Pull Claude-suggested UI scenarios from the approved plan.
+
+    Returns list of {"name": str, "instruction": str} dicts that UIAgent
+    will run AFTER its hardcoded baseline scenarios.
+    """
+    extras: list[dict] = []
+    if not session.plan:
+        return extras
+    ui_cat_value = TestCategory.UI.value
+    for item in session.plan.items:
+        tc = item.test_case
+        cat = tc.category
+        cat_val = cat.value if hasattr(cat, "value") else str(cat)
+        if cat_val != ui_cat_value:
+            continue
+        if tc.script_path:
+            continue
+        # Prefer the natural-language ui_instruction stashed in payload by the planner
+        instruction = ""
+        if isinstance(tc.payload, dict):
+            instruction = tc.payload.get("ui_instruction", "") or ""
+        if not instruction:
+            instruction = tc.description or tc.name
+        extras.append({"name": tc.name, "instruction": instruction})
+    return extras
+
+
 async def _run_ui_tests(session: Session) -> None:
+    """Run UIAgent against the target browser with live CDP screencast.
+
+    Includes:
+      1. Hardcoded baseline scenarios (dashboard, search, cards, etc.)
+      2. Any Claude-suggested UI scenarios from the change-driven plan
+
+    Failures inside UIAgent (e.g. Chromium crash) are converted to a single
+    TestResult.ERROR so the session still completes and reports cleanly.
+    """
+    extras = _extract_ui_extras_from_plan(session)
+    if extras:
+        await emit_log(
+            session.id,
+            f"[Engine] {len(extras)} change-driven UI scenario(s) injected from plan",
+        )
     await emit_log(session.id, "[Engine] Starting UI (Computer Use) tests…")
     agent = UIAgent(session.id)
     try:
-        ui_results = await agent.run_all_scenarios()
+        ui_results = await agent.run_all_scenarios(extra_scenarios=extras)
         for r in ui_results:
-            session.results.append(r)
-        session_store.update(session)
+            await _emit_result(session, r, "UIAgent")
     except Exception as exc:
+        log.exception("engine.ui_tests_failed", context={"session": session.id})
+        # Convert the crash into a visible TestResult so the user sees what happened
+        err_result = TestResult(
+            test_id=f"ui-runner-error-{session.id[:8]}",
+            test_name="UI runner crashed",
+            module="UI",
+            category="UI",
+            status=TestStatus.ERROR,
+            duration_ms=0.0,
+            error=str(exc)[:500],
+        )
+        await _emit_result(session, err_result, "UIAgent")
         await emit_log(session.id, f"[UIAgent] Error: {exc}", level="ERROR")
 
 

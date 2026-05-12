@@ -112,6 +112,44 @@
 
     /* Glow for active stat */
     .kpi-glow { box-shadow:0 0 0 4px rgba(16,185,129,.12); }
+
+    /* Change-driven mode: hide left config sidebar, full-width right panel */
+    #run-tests-grid.change-driven-mode { grid-template-columns: 0 1fr; }
+    #run-tests-grid.change-driven-mode > div:first-child { display: none; }
+
+    /* Change Context header card (shown above the plan) */
+    .change-context-card { background:#fffbeb; border:1px solid #fcd34d; border-left:4px solid #f59e0b; border-radius:8px; padding:12px 16px; margin:0 0 12px; }
+    .change-context-card .ctx-title { font-size:12px; font-weight:700; color:#92400e; text-transform:uppercase; letter-spacing:.06em; margin-bottom:6px; display:flex; align-items:center; gap:8px; }
+    .change-context-card .ctx-summary { font-size:13px; color:#451a03; line-height:1.5; max-height:60px; overflow:hidden; transition:max-height .25s; }
+    .change-context-card .ctx-summary.expanded { max-height:600px; }
+    .change-context-card .ctx-toggle { font-size:11px; color:#b45309; cursor:pointer; font-weight:600; margin-top:6px; display:inline-block; }
+    .change-context-card .ctx-meta { display:flex; flex-wrap:wrap; gap:8px; align-items:center; font-size:11px; color:#78350f; margin-top:8px; }
+
+    /* Per-category mini counters above progress bar */
+    .cat-counters { display:flex; flex-wrap:wrap; gap:5px; margin-top:6px; }
+    .cat-counter { display:inline-flex; align-items:center; gap:4px; font-size:10px; font-weight:600; padding:2px 7px; border-radius:10px; background:#f1f5f9; color:#475569; }
+    .cat-counter .pass-num { color:#10b981; }
+    .cat-counter .fail-num { color:#ef4444; }
+
+    /* Live UI canvas + history strip placeholder */
+    .ui-placeholder { display:flex; align-items:center; justify-content:center; height:100%; color:#484f58; font-size:12px; flex-direction:column; gap:8px; }
+    .ui-placeholder .spinner { width:24px; height:24px; border:3px solid #1c2333; border-top-color:#3b82f6; border-radius:50%; animation:spin .9s linear infinite; }
+
+    /* Category chips on plan items + test output */
+    .cat-chip { display:inline-block; font-size:9px; font-weight:700; padding:1px 6px; border-radius:8px; text-transform:uppercase; letter-spacing:.04em; vertical-align:middle; }
+    .cat-Unit          { background:#f1f5f9; color:#475569; }
+    .cat-Functional    { background:#dbeafe; color:#1d4ed8; }
+    .cat-API           { background:#dbeafe; color:#1d4ed8; }
+    .cat-Integration   { background:#ccfbf1; color:#0f766e; }
+    .cat-Header        { background:#fef3c7; color:#b45309; }
+    .cat-Security      { background:#fee2e2; color:#b91c1c; }
+    .cat-Vulnerability { background:#fee2e2; color:#b91c1c; }
+    .cat-Performance   { background:#ede9fe; color:#6d28d9; }
+    .cat-UI            { background:#cffafe; color:#0e7490; }
+
+    /* Plan item category grouping section header */
+    .plan-section-h { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:#64748b; margin:12px 0 4px; padding-left:2px; display:flex; align-items:center; gap:8px; }
+    .plan-section-h .sec-count { color:#94a3b8; font-weight:500; }
   </style>
 </head>
 <body>
@@ -338,7 +376,7 @@
     <!-- ═══════════ RUN TESTS (split panel) ═══════════ -->
     <div class="view" id="view-run-tests">
       <!-- Split layout: left config, right live panel -->
-      <div style="display:grid;grid-template-columns:340px 1fr;height:100%;overflow:hidden;">
+      <div id="run-tests-grid" style="display:grid;grid-template-columns:340px 1fr;height:100%;overflow:hidden;">
 
         <!-- ── LEFT: Configuration ── -->
         <div style="border-right:1px solid #e2e8f0;display:flex;flex-direction:column;overflow:hidden;background:#fff;">
@@ -458,13 +496,33 @@
               <span class="pill p-green">READY FOR REVIEW</span>
             </div>
             <div style="flex:1;overflow:hidden;display:flex;flex-direction:column;">
-              <!-- AI summary -->
-              <div style="padding:14px 20px;background:#f0fdf9;border-bottom:1px solid #d1fae5;flex-shrink:0;">
-                <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#059669;margin-bottom:4px;">AI Analysis</div>
-                <p style="font-size:13px;color:#065f46;line-height:1.5;" id="plan-summary">—</p>
+              <!-- Scrollable plan body (header card + items both live inside this scroll container) -->
+              <div style="flex:1;overflow-y:auto;padding:14px 18px;">
+                <!-- Change Context header card (only populated for change-driven sessions) -->
+                <div id="plan-ctx-card" class="change-context-card" style="display:none;">
+                  <div class="ctx-title">
+                    <span>⚡ Change-driven test plan</span>
+                    <span id="plan-ctx-risk" class="pill" style="font-size:10px;">RISK</span>
+                  </div>
+                  <div id="plan-ctx-summary" class="ctx-summary">—</div>
+                  <a class="ctx-toggle" id="plan-ctx-toggle" onclick="togglePlanCtxSummary()">Show more ▾</a>
+                  <div class="ctx-meta">
+                    <span id="plan-ctx-files">— files changed</span>
+                    <span>·</span>
+                    <a id="plan-ctx-commit" href="#" target="_blank" rel="noopener" style="color:#b45309;font-weight:600;display:none;">View commit on GitHub →</a>
+                    <a id="plan-ctx-viewchanges" onclick="navigateTo('changes')" style="cursor:pointer;color:#b45309;font-weight:600;text-decoration:underline;">Review full diff</a>
+                  </div>
+                </div>
+
+                <!-- Standard AI summary (for non-change-driven sessions OR collapsed mode) -->
+                <div id="plan-summary-wrap" style="padding:12px 14px;background:#f0fdf9;border:1px solid #d1fae5;border-radius:8px;margin-bottom:10px;">
+                  <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#059669;margin-bottom:4px;">AI Plan Summary</div>
+                  <p style="font-size:12.5px;color:#065f46;line-height:1.5;" id="plan-summary">—</p>
+                </div>
+
+                <!-- Plan items (grouped by category) -->
+                <div id="plan-items" style="display:flex;flex-direction:column;gap:4px;"></div>
               </div>
-              <!-- Plan items -->
-              <div style="flex:1;overflow-y:auto;padding:12px 16px;display:flex;flex-direction:column;gap:6px;" id="plan-items"></div>
             </div>
             <!-- Approve row -->
             <div style="padding:14px 16px;border-top:1px solid #e2e8f0;background:#fff;flex-shrink:0;display:flex;gap:8px;flex-direction:column;">
@@ -501,7 +559,9 @@
                   <span style="color:#f59e0b;font-weight:600;"><span id="exec-errors">0</span> err</span>
                 </div>
               </div>
-              <div class="prog-track">
+              <!-- Per-category mini-counters (pass/fail/total per category) -->
+              <div class="cat-counters" id="cat-counters"></div>
+              <div class="prog-track" style="margin-top:6px;">
                 <div class="prog-fill" id="exec-prog-bar" style="width:0%;background:linear-gradient(90deg,#10b981,#059669);"></div>
               </div>
             </div>
@@ -524,12 +584,21 @@
                 <span id="ui-stream-fps" style="margin-left:auto;font-size:10px;color:#484f58;font-family:'JetBrains Mono',monospace;">— fps</span>
               </div>
               <div style="display:flex;gap:8px;padding:8px;">
-                <!-- Live canvas -->
-                <canvas id="ui-live" width="1024" height="640" style="background:#000;border-radius:6px;max-width:60%;height:auto;"></canvas>
+                <!-- Live canvas + placeholder overlay -->
+                <div style="position:relative;max-width:60%;width:60%;">
+                  <canvas id="ui-live" width="1024" height="640" style="background:#000;border-radius:6px;width:100%;height:auto;display:block;"></canvas>
+                  <div id="ui-live-placeholder" class="ui-placeholder" style="position:absolute;inset:0;background:#0d1117;border-radius:6px;">
+                    <div class="spinner"></div>
+                    <div>Browser starting…</div>
+                    <div style="font-size:10px;color:#484f58;">Waiting for first frame from Claude Computer Use</div>
+                  </div>
+                </div>
                 <!-- Action history strip -->
                 <div style="flex:1;min-width:0;background:#161b22;border-radius:6px;padding:6px;overflow:hidden;display:flex;flex-direction:column;">
                   <div style="font-size:10px;color:#8b949e;text-transform:uppercase;letter-spacing:.06em;padding:2px 4px 6px;flex-shrink:0;">Action history</div>
-                  <div id="ui-history-strip" style="flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:5px;"></div>
+                  <div id="ui-history-strip" style="flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:5px;">
+                    <div id="ui-history-empty" style="color:#484f58;font-size:11px;text-align:center;padding:24px 12px;">No actions yet</div>
+                  </div>
                 </div>
               </div>
             </div>
