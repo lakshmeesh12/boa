@@ -6,3 +6,5 @@ pydantic==2.9.2
 python-dotenv==1.0.1
 faker==30.8.2
 python-multipart==0.0.12
+# Added by demo push - known CVEs (CVE-2018-18074 et al.)
+requests==2.20.0
