@@ -18,6 +18,7 @@ class Settings:
     claude_api_key: str
     claude_model_opus: str
     claude_model_sonnet: str
+    claude_model_computer_use: str   # Sonnet 4.6 does NOT support computer_20250124; use Sonnet 4.5 for UIAgent
 
     # OpenAI (embeddings)
     openai_api_key: str
@@ -60,6 +61,7 @@ class Settings:
             claude_api_key=os.environ["CLAUDE_API_KEY"],
             claude_model_opus=os.getenv("CLAUDE_MODEL_OPUS", "claude-opus-4-7"),
             claude_model_sonnet=os.getenv("CLAUDE_MODEL_SONNET", "claude-sonnet-4-6"),
+            claude_model_computer_use=os.getenv("CLAUDE_MODEL_COMPUTER_USE", "claude-sonnet-4-5"),
 
             openai_api_key=os.environ["OPENAI_API_KEY"],
             openai_embedding_model=os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-3-large"),

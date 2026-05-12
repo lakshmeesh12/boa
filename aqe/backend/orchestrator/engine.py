@@ -114,14 +114,37 @@ async def _execute(session: Session) -> None:
     8. Analyse + report
     """
     try:
-        await _run_vuln_scans(session)
-        await _run_unit_tests(session)
-        await _run_header_tests(session)
+        # ── Phase 1 (PARALLEL): Vuln + Unit + Header ──
+        # These three runners touch different sources (deps / pytest / HTTP)
+        # and never share state, so they run concurrently to cut wall-time.
+        await emit_log(session.id, "[Engine] === Phase 1: Vuln + Unit + Header (parallel) ===")
+        phase1_start = asyncio.get_event_loop().time()
+        await asyncio.gather(
+            _run_vuln_scans(session),
+            _run_unit_tests(session),
+            _run_header_tests(session),
+        )
+        await emit_log(
+            session.id,
+            f"[Engine] Phase 1 done in {asyncio.get_event_loop().time() - phase1_start:.1f}s",
+        )
+
+        # ── Phase 2: API tests (parallel within suite via bounded semaphore) ──
+        await emit_log(session.id, "[Engine] === Phase 2: API tests (concurrency=6) ===")
         await _run_api_tests(session)
+
+        # ── Phase 3: Performance probes (already parallel internally) ──
+        await emit_log(session.id, "[Engine] === Phase 3: Performance probes ===")
         await _run_perf_tests(session)
+
+        # ── Phase 4: UI tests (must be serial — one browser instance) ──
         if _should_run_ui_tests(session):
+            await emit_log(session.id, "[Engine] === Phase 4: UI tests (Computer Use + screencast) ===")
             await _run_ui_tests(session)
+
+        # ── Phase 5: scripts ──
         await _run_script_tests(session)
+        # ── Phase 6: report ──
         await _analyse_and_report(session)
     except asyncio.CancelledError:
         log.info("engine.execution_cancelled", context={"session": session.id})
@@ -163,12 +186,17 @@ async def _emit_result(session: Session, result: TestResult, agent_label: str) -
 async def _run_vuln_scans(session: Session) -> None:
     if not _plan_has_category(session, TestCategory.VULNERABILITY) and session.change_context is None:
         return
-    await emit_log(session.id, "[Engine] Running vulnerability scans (pip-audit + bandit + semgrep)…")
+    await emit_log(session.id, "[VulnScanner] starting (pip-audit + bandit) …")
+    t0 = asyncio.get_event_loop().time()
     try:
         results = await vuln_scanner.run_all_scans()
     except Exception as exc:
         await emit_log(session.id, f"[VulnScanner] Error: {exc}", level="ERROR")
         return
+    await emit_log(
+        session.id,
+        f"[VulnScanner] done in {asyncio.get_event_loop().time() - t0:.1f}s - emitting {len(results)} result(s)",
+    )
     for r in results:
         await _emit_result(session, r, "VulnScanner")
 
@@ -176,13 +204,18 @@ async def _run_vuln_scans(session: Session) -> None:
 async def _run_unit_tests(session: Session) -> None:
     if not _plan_has_category(session, TestCategory.UNIT) and session.change_context is None:
         return
-    await emit_log(session.id, "[Engine] Generating + running unit tests…")
+    await emit_log(session.id, "[UnitRunner] generating pytest files from diff …")
+    t0 = asyncio.get_event_loop().time()
     try:
         cs = session.change_context.change_set if session.change_context else None
         results = await unit_runner.run_unit_tests(session.id, cs)
     except Exception as exc:
         await emit_log(session.id, f"[UnitRunner] Error: {exc}", level="ERROR")
         return
+    await emit_log(
+        session.id,
+        f"[UnitRunner] done in {asyncio.get_event_loop().time() - t0:.1f}s - {len(results)} result(s)",
+    )
     for r in results:
         await _emit_result(session, r, "UnitRunner")
 
@@ -190,12 +223,17 @@ async def _run_unit_tests(session: Session) -> None:
 async def _run_header_tests(session: Session) -> None:
     if not _plan_has_category(session, TestCategory.HEADER) and session.change_context is None:
         return
-    await emit_log(session.id, "[Engine] Running HTTP security-header tests…")
+    await emit_log(session.id, "[HeaderRunner] probing security headers …")
+    t0 = asyncio.get_event_loop().time()
     try:
         results = await header_runner.run_header_tests()
     except Exception as exc:
         await emit_log(session.id, f"[HeaderRunner] Error: {exc}", level="ERROR")
         return
+    await emit_log(
+        session.id,
+        f"[HeaderRunner] done in {asyncio.get_event_loop().time() - t0:.1f}s - {len(results)} check(s)",
+    )
     for r in results:
         await _emit_result(session, r, "HeaderRunner")
 
@@ -203,12 +241,17 @@ async def _run_header_tests(session: Session) -> None:
 async def _run_perf_tests(session: Session) -> None:
     if not _plan_has_category(session, TestCategory.PERFORMANCE) and session.change_context is None:
         return
-    await emit_log(session.id, "[Engine] Running performance probes…")
+    await emit_log(session.id, "[PerfRunner] launching parallel load probes …")
+    t0 = asyncio.get_event_loop().time()
     try:
         results = await perf_runner.run_perf_tests()
     except Exception as exc:
         await emit_log(session.id, f"[PerfRunner] Error: {exc}", level="ERROR")
         return
+    await emit_log(
+        session.id,
+        f"[PerfRunner] done in {asyncio.get_event_loop().time() - t0:.1f}s - {len(results)} probe(s)",
+    )
     for r in results:
         await _emit_result(session, r, "PerfRunner")
 

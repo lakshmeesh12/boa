@@ -184,7 +184,7 @@ class UIAgent:
 
         for turn in range(self.max_turns):
             response = _client.beta.messages.create(
-                model=settings.claude_model_sonnet,
+                model=settings.claude_model_computer_use,
                 max_tokens=4096,
                 tools=tools,
                 messages=messages,

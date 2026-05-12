@@ -576,8 +576,11 @@
               </div>
             </div>
 
-            <!-- Live UI streaming panel (shown only when UI agent runs) -->
-            <div id="ui-stream-wrap" style="display:none;flex-shrink:0;background:#0d1117;border-bottom:1px solid #1c2333;">
+            <!-- Live UI streaming panel — ALWAYS visible during rp-exec so the
+                 user always knows where the UI agent's browser will appear.
+                 Shows the "Queued — UI phase will start after..." placeholder
+                 until the first frame arrives. -->
+            <div id="ui-stream-wrap" style="flex-shrink:0;background:#0d1117;border-bottom:1px solid #1c2333;">
               <div style="background:#161b22;padding:6px 12px;display:flex;align-items:center;gap:6px;">
                 <div class="pulse dot" style="background:#3b82f6;width:9px;height:9px;"></div>
                 <span style="font-size:10px;font-weight:600;color:#8b949e;text-transform:uppercase;letter-spacing:.06em;">Live UI — Claude Computer Use</span>
@@ -589,8 +592,8 @@
                   <canvas id="ui-live" width="1024" height="640" style="background:#000;border-radius:6px;width:100%;height:auto;display:block;"></canvas>
                   <div id="ui-live-placeholder" class="ui-placeholder" style="position:absolute;inset:0;background:#0d1117;border-radius:6px;">
                     <div class="spinner"></div>
-                    <div>Browser starting…</div>
-                    <div style="font-size:10px;color:#484f58;">Waiting for first frame from Claude Computer Use</div>
+                    <div id="ui-live-placeholder-msg">Queued — UI phase starts after API + Perf complete</div>
+                    <div style="font-size:10px;color:#484f58;">Live browser frames + action history will appear here</div>
                   </div>
                 </div>
                 <!-- Action history strip -->

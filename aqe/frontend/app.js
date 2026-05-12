@@ -670,12 +670,20 @@ function ensureUiCanvas(){
 }
 
 function showUiStreamPanel(){
+  // Panel is now always rendered when rp-exec is shown. This function only
+  // (1) flips the placeholder message to "Browser starting…" once UIAgent
+  //     log lines arrive, and (2) initialises the fps counter.
   const w=$("ui-stream-wrap"); if(w) w.style.display="";
   if(!_uiFpsStart){_uiFpsStart=Date.now(); _uiFrameCount=0;}
+  const msg=$("ui-live-placeholder-msg");
+  if(msg && /Queued/.test(msg.textContent)){
+    msg.textContent="Browser starting…";
+  }
 }
 
 function hideUiStreamPanel(){
-  const w=$("ui-stream-wrap"); if(w) w.style.display="none";
+  // No-op: the panel stays visible throughout rp-exec so the user always
+  // knows where UI tests will appear. Reset content via resetExecUI() instead.
 }
 
 function drawUiFrame(b64){
@@ -765,16 +773,29 @@ function handleWs(envelope, planMode){
   }
 }
 
+// Max DOM children per terminal — anything beyond is auto-trimmed from the
+// oldest end. Without this cap, runners that emit thousands of events (e.g.
+// bandit on a real codebase) freeze the browser by creating tens of thousands
+// of DOM nodes. 800 keeps recent context while staying snappy.
+const _TERM_MAX_LINES = 800;
+
+function _trimTerm(el){
+  if(!el) return;
+  while(el.childElementCount > _TERM_MAX_LINES){
+    el.removeChild(el.firstChild);
+  }
+}
+
 function appendLog(cls,txt){
   const el=$("agent-log");if(!el)return;
   const d=document.createElement("div");d.className=cls;
   d.textContent=`[${new Date().toLocaleTimeString()}] ${txt}`;
-  el.appendChild(d);el.scrollTop=el.scrollHeight;
+  el.appendChild(d); _trimTerm(el); el.scrollTop=el.scrollHeight;
 }
 function appendTerm(cls,txt){
   const el=$("test-out");if(!el)return;
   const d=document.createElement("div");d.className=cls;d.textContent=txt;
-  el.appendChild(d);el.scrollTop=el.scrollHeight;
+  el.appendChild(d); _trimTerm(el); el.scrollTop=el.scrollHeight;
 }
 window.clrTerm=function(){const e=$("test-out");if(e)e.innerHTML="";};
 
@@ -790,13 +811,17 @@ function resetExecUI(){
   if(strip){
     strip.innerHTML='<div id="ui-history-empty" style="color:#484f58;font-size:11px;text-align:center;padding:24px 12px;">No actions yet</div>';
   }
-  // Restore the canvas placeholder (Browser starting...) for next run
+  // Restore the canvas placeholder for next run. Panel stays visible.
   const ph=$("ui-live-placeholder"); if(ph) ph.style.display="";
+  const phMsg=$("ui-live-placeholder-msg");
+  if(phMsg) phMsg.textContent="Queued — UI phase starts after API + Perf complete";
   _uiFrameCount=0; _uiFpsStart=null;
   _lByCategory={};
   const cc=$("cat-counters"); if(cc) cc.innerHTML="";
   setText("ui-stream-fps", "— fps");
-  hideUiStreamPanel();
+  // Paint canvas black so prior-run frames don't linger
+  const cv=$("ui-live");
+  if(cv){const c2=cv.getContext("2d"); c2.fillStyle="#000"; c2.fillRect(0,0,cv.width,cv.height);}
 }
 function updateExecProg(){
   setText("exec-passed",_lPass);setText("exec-failed",_lFail);setText("exec-errors",_lErr);

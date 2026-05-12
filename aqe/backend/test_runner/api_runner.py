@@ -212,12 +212,25 @@ class APIRunner:
         self,
         tests: list[TestCase],
         on_result=None,
+        concurrency: int = 6,
     ) -> list[TestResult]:
-        results = []
-        for test in tests:
-            result = await self.run_test(test)
-            results.append(result)
+        """Run tests with bounded concurrency. Pre-loads fixtures once so all
+        parallel tasks share the same cache. Results stream to `on_result` AS
+        they complete (not in submission order) so the UI shows progress live.
+        """
+        await self._load_fixtures()  # one-time, shared
+
+        sem = asyncio.Semaphore(concurrency)
+        results: list[TestResult] = []
+        lock = asyncio.Lock()
+
+        async def _one(test: TestCase) -> None:
+            async with sem:
+                result = await self.run_test(test)
+            async with lock:
+                results.append(result)
             if on_result:
                 await on_result(result)
-            await asyncio.sleep(0.05)  # small gap between tests
+
+        await asyncio.gather(*[_one(t) for t in tests])
         return results
