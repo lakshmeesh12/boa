@@ -25,6 +25,52 @@ _screencast_on_frame = None  # callback(frame_b64: str) -> awaitable
 _screencast_task = None
 
 
+# ── Computer-Use → Playwright key-name normalization ────────────────────────
+# Claude Computer Use emits keys in xdotool / X11 dialect. Playwright expects
+# its own dictionary. This table maps the variants we've seen Claude emit.
+# Without this, Playwright raises: Keyboard.press: Unknown key: "altLeft"
+_CU_TO_PW_KEY: dict[str, str] = {
+    # Modifiers — sided variants collapse to the unsided form
+    "altleft": "Alt", "altright": "Alt", "alt_l": "Alt", "alt_r": "Alt", "alt": "Alt",
+    "ctrlleft": "Control", "ctrlright": "Control", "ctrl_l": "Control", "ctrl_r": "Control",
+    "ctrl": "Control", "control_l": "Control", "control_r": "Control", "control": "Control",
+    "shiftleft": "Shift", "shiftright": "Shift", "shift_l": "Shift", "shift_r": "Shift",
+    "shift": "Shift",
+    "metaleft": "Meta", "metaright": "Meta", "meta_l": "Meta", "meta_r": "Meta",
+    "meta": "Meta", "cmd": "Meta", "command": "Meta", "super": "Meta", "win": "Meta",
+    # Navigation / control
+    "return": "Enter", "enter": "Enter", "kp_enter": "Enter",
+    "esc": "Escape", "escape": "Escape",
+    "backspace": "Backspace", "bksp": "Backspace",
+    "del": "Delete", "delete": "Delete",
+    "tab": "Tab",
+    "space": " ", "spacebar": " ",
+    "up": "ArrowUp", "down": "ArrowDown", "left": "ArrowLeft", "right": "ArrowRight",
+    "page_up": "PageUp", "pageup": "PageUp",
+    "page_down": "PageDown", "pagedown": "PageDown",
+    "home": "Home", "end": "End",
+    "insert": "Insert",
+}
+
+
+def _normalize_key(raw: str) -> str:
+    """Convert a Claude Computer Use key string (e.g. 'altLeft', 'Return',
+    'alt+a') to Playwright's expected format ('Alt', 'Enter', 'Alt+a')."""
+    if not raw:
+        return raw
+    parts = [p.strip() for p in raw.replace(" ", "").split("+") if p.strip()]
+    mapped: list[str] = []
+    for p in parts:
+        lower = p.lower()
+        if lower in _CU_TO_PW_KEY:
+            mapped.append(_CU_TO_PW_KEY[lower])
+        elif len(p) == 1:
+            mapped.append(p)  # single char passes through
+        else:
+            mapped.append(p[:1].upper() + p[1:])  # title-case unknown multi-char
+    return "+".join(mapped)
+
+
 async def start_browser() -> None:
     global _page, _browser, _playwright
     if _page is not None:
@@ -97,8 +143,13 @@ async def execute_action(action: dict[str, Any]) -> str:
         await _page.keyboard.type(action["text"])
 
     elif atype == "key":
-        key = action["text"].replace("+", "")
-        await _page.keyboard.press(key)
+        # Claude Computer Use sends key names in its own dialect (e.g. "altLeft",
+        # "ctrlLeft", "Return", or chord syntax "Alt+a"). Playwright's Keyboard
+        # uses a different set — "Alt", "Control", "Enter", and chords like "Alt+a"
+        # with each token Title-cased. Normalize before pressing or Playwright
+        # raises Keyboard.press: Unknown key.
+        raw = action["text"]
+        await _page.keyboard.press(_normalize_key(raw))
 
     elif atype == "scroll":
         x, y = action["coordinate"]

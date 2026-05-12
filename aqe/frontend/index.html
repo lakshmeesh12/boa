@@ -576,28 +576,31 @@
               </div>
             </div>
 
-            <!-- Live UI streaming panel — ALWAYS visible during rp-exec so the
-                 user always knows where the UI agent's browser will appear.
-                 Shows the "Queued — UI phase will start after..." placeholder
-                 until the first frame arrives. -->
-            <div id="ui-stream-wrap" style="flex-shrink:0;background:#0d1117;border-bottom:1px solid #1c2333;">
-              <div style="background:#161b22;padding:6px 12px;display:flex;align-items:center;gap:6px;">
+            <!-- Live UI streaming panel — fixed 320px tall (canvas + history side-by-side).
+                 Always visible during rp-exec so the user knows where browser activity will appear. -->
+            <div id="ui-stream-wrap" style="flex-shrink:0;height:320px;background:#0d1117;border-bottom:1px solid #1c2333;display:flex;flex-direction:column;">
+              <div style="background:#161b22;padding:6px 12px;display:flex;align-items:center;gap:6px;flex-shrink:0;">
                 <div class="pulse dot" style="background:#3b82f6;width:9px;height:9px;"></div>
                 <span style="font-size:10px;font-weight:600;color:#8b949e;text-transform:uppercase;letter-spacing:.06em;">Live UI — Claude Computer Use</span>
-                <span id="ui-stream-fps" style="margin-left:auto;font-size:10px;color:#484f58;font-family:'JetBrains Mono',monospace;">— fps</span>
+                <span id="ui-current-action" style="font-size:10px;color:#79c0ff;font-family:'JetBrains Mono',monospace;margin-left:12px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
+                <span id="ui-stream-fps" style="font-size:10px;color:#484f58;font-family:'JetBrains Mono',monospace;flex-shrink:0;">— fps</span>
               </div>
-              <div style="display:flex;gap:8px;padding:8px;">
+              <div style="flex:1;display:flex;gap:8px;padding:8px;overflow:hidden;">
                 <!-- Live canvas + placeholder overlay -->
-                <div style="position:relative;max-width:60%;width:60%;">
-                  <canvas id="ui-live" width="1024" height="640" style="background:#000;border-radius:6px;width:100%;height:auto;display:block;"></canvas>
+                <div style="position:relative;flex:1;min-width:0;height:100%;">
+                  <canvas id="ui-live" width="1024" height="640" style="background:#000;border-radius:6px;width:100%;height:100%;display:block;object-fit:contain;"></canvas>
                   <div id="ui-live-placeholder" class="ui-placeholder" style="position:absolute;inset:0;background:#0d1117;border-radius:6px;">
                     <div class="spinner"></div>
                     <div id="ui-live-placeholder-msg">Queued — UI phase starts after API + Perf complete</div>
                     <div style="font-size:10px;color:#484f58;">Live browser frames + action history will appear here</div>
                   </div>
+                  <!-- Current action banner (overlaid on canvas) -->
+                  <div id="ui-action-banner" style="position:absolute;left:0;right:0;bottom:0;background:linear-gradient(to top,rgba(0,0,0,0.85),transparent);padding:8px 12px;color:#fff;font-size:11px;font-family:'JetBrains Mono',monospace;display:none;">
+                    <span id="ui-action-banner-text">—</span>
+                  </div>
                 </div>
-                <!-- Action history strip -->
-                <div style="flex:1;min-width:0;background:#161b22;border-radius:6px;padding:6px;overflow:hidden;display:flex;flex-direction:column;">
+                <!-- Action history strip (right) -->
+                <div style="width:240px;flex-shrink:0;background:#161b22;border-radius:6px;padding:6px;display:flex;flex-direction:column;overflow:hidden;">
                   <div style="font-size:10px;color:#8b949e;text-transform:uppercase;letter-spacing:.06em;padding:2px 4px 6px;flex-shrink:0;">Action history</div>
                   <div id="ui-history-strip" style="flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:5px;">
                     <div id="ui-history-empty" style="color:#484f58;font-size:11px;text-align:center;padding:24px 12px;">No actions yet</div>
@@ -606,10 +609,10 @@
               </div>
             </div>
 
-            <!-- Terminal split -->
-            <div style="flex:1;overflow:hidden;display:grid;grid-template-rows:1fr 1fr;">
-              <!-- Agent log (top) -->
-              <div style="display:flex;flex-direction:column;border-bottom:1px solid #1c2333;overflow:hidden;">
+            <!-- Terminal split — agent log + test output SIDE-BY-SIDE below the UI panel -->
+            <div style="flex:1;overflow:hidden;display:grid;grid-template-columns:1fr 1fr;background:#0d1117;">
+              <!-- Agent log (left) -->
+              <div style="display:flex;flex-direction:column;border-right:1px solid #1c2333;overflow:hidden;">
                 <div style="background:#161b22;padding:6px 12px;display:flex;align-items:center;gap:6px;flex-shrink:0;">
                   <div class="dot" style="background:#f97316;width:9px;height:9px;"></div>
                   <span style="font-size:10px;font-weight:600;color:#8b949e;text-transform:uppercase;letter-spacing:.06em;">Agent Activity</span>
@@ -617,7 +620,7 @@
                 </div>
                 <div class="term" id="agent-log" style="flex:1;overflow-y:auto;"></div>
               </div>
-              <!-- Test output (bottom) -->
+              <!-- Test output (right) -->
               <div style="display:flex;flex-direction:column;overflow:hidden;">
                 <div style="background:#161b22;padding:6px 12px;display:flex;align-items:center;gap:6px;justify-content:space-between;flex-shrink:0;">
                   <div style="display:flex;align-items:center;gap:6px;">

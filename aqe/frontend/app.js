@@ -704,18 +704,33 @@ function drawUiFrame(b64){
   }
 }
 
+function _updateActionBanner(action){
+  // Bottom-of-canvas overlay showing the current Computer Use action.
+  // This makes it visible that the agent is doing something even when the
+  // banking dashboard page itself doesn't visually change much between clicks.
+  const bn=$("ui-action-banner"), txt=$("ui-action-banner-text"), hdr=$("ui-current-action");
+  if(!bn || !txt) return;
+  bn.style.display="";
+  txt.textContent = "▶ " + action;
+  if(hdr) hdr.textContent = "▶ " + action;
+}
+
 function appendActionSnapshot(action, b64){
   showUiStreamPanel();
   // Clear the "No actions yet" placeholder on first snapshot
   const empty=$("ui-history-empty"); if(empty) empty.remove();
+  // Update the on-canvas action banner so the user always sees what's happening
+  _updateActionBanner(action);
   const strip=$("ui-history-strip"); if(!strip) return;
   const row=document.createElement("div");
   row.style.cssText="display:flex;gap:6px;background:#0d1117;border:1px solid #1c2333;border-radius:5px;padding:5px;cursor:pointer;";
   row.title=action;
   row.onclick=()=>drawUiFrame(b64);  // click thumbnail -> re-render large
-  row.innerHTML=`<img src="data:image/png;base64,${b64}" style="width:88px;height:auto;border-radius:3px;object-fit:cover;flex-shrink:0;" />
+  row.innerHTML=`<img src="data:image/png;base64,${b64}" style="width:60px;height:auto;border-radius:3px;object-fit:cover;flex-shrink:0;" />
     <div style="flex:1;min-width:0;font-size:10px;color:#8b949e;line-height:1.4;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(action)}</div>`;
   strip.appendChild(row);
+  // Cap action history to last 50 to avoid runaway DOM growth
+  while(strip.childElementCount > 50){ strip.removeChild(strip.firstChild); }
   strip.scrollTop=strip.scrollHeight;
 }
 
@@ -758,7 +773,21 @@ function handleWs(envelope, planMode){
     if(["COMPLETED","FAILED","CANCELLED"].includes(data.state)){
       stopTimer();
       hideUiStreamPanel();
-      apiFetch(`/sessions/${_sid}`).then(s=>showDone(s)).catch(()=>{});
+      apiFetch(`/sessions/${_sid}`).then(s=>{
+        showDone(s);
+        // Auto-navigate to Reports view 2s after completion so the user sees
+        // the final pass/fail counters first, then the report opens itself.
+        if(data.state==="COMPLETED" && _doneReportId){
+          setTimeout(()=>{
+            const repId=_doneReportId, sName=s.name||(s.id||"").slice(0,8);
+            navigateTo("reports");
+            // openReportInline is defined in the reports section
+            if(typeof openReportInline==="function"){
+              openReportInline(repId, sName);
+            }
+          }, 2000);
+        }
+      }).catch(()=>{});
     }
   }else if(type==="plan_ready"){
     if(planMode) addPlanLog(`Plan ready — ${data.total_cases} test cases`,"info");
@@ -822,6 +851,9 @@ function resetExecUI(){
   // Paint canvas black so prior-run frames don't linger
   const cv=$("ui-live");
   if(cv){const c2=cv.getContext("2d"); c2.fillStyle="#000"; c2.fillRect(0,0,cv.width,cv.height);}
+  // Hide action banner
+  const bn=$("ui-action-banner"); if(bn) bn.style.display="none";
+  const hdr=$("ui-current-action"); if(hdr) hdr.textContent="";
 }
 function updateExecProg(){
   setText("exec-passed",_lPass);setText("exec-failed",_lFail);setText("exec-errors",_lErr);
