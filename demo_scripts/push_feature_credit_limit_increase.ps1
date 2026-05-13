@@ -39,21 +39,28 @@ function Fail($msg) {
     exit 1
 }
 
-# 0. Workspace must be clean
-$dirty = git status --porcelain
-if ($dirty) {
-    Write-Host "Workspace is dirty:" -ForegroundColor Red
-    Write-Host $dirty
+# Target-app paths this script mutates. Keep in sync with revert_to_baseline.ps1.
+$TargetPaths = @("backend", "frontend")
+
+# 0. Target-app paths must be clean. AQE work (anywhere under aqe/) is ALLOWED
+# to be dirty -- it is preserved across demo iterations by design.
+$dirtyTarget = git status --porcelain -- $TargetPaths 2>$null
+if ($dirtyTarget) {
+    Write-Host "Target paths (backend/, frontend/) are dirty:" -ForegroundColor Red
+    Write-Host $dirtyTarget
     Write-Host ""
     Fail "Run demo_scripts\revert_to_baseline.ps1 first."
 }
 
-# 0b. Verify we are on the baseline
+# 0b. Verify the target-app paths match the baseline tag. HEAD itself may be
+# ahead of baseline (the revert script adds a 'revert target app' commit) --
+# what matters is that backend/ and frontend/ on disk equal their state at the
+# baseline tag.
 $baselineSha = "$(git rev-parse aqe-demo-baseline 2>$null)".Trim()
-$headSha     = "$(git rev-parse HEAD 2>$null)".Trim()
 if (-not $baselineSha) { Fail "aqe-demo-baseline tag not found. Run setup_demo_repo.ps1." }
-if ($headSha -ne $baselineSha) {
-    Write-Host "HEAD ($($headSha.Substring(0,7))) is ahead of baseline ($($baselineSha.Substring(0,7)))" -ForegroundColor Yellow
+$targetDiffFromBaseline = git diff aqe-demo-baseline -- $TargetPaths
+if ($targetDiffFromBaseline) {
+    Write-Host "Target paths differ from baseline -- revert before pushing the feature." -ForegroundColor Yellow
     Fail "Revert to baseline first."
 }
 
@@ -112,7 +119,7 @@ async def increase_credit_limit(card_id: str, body: LimitIncreaseRequest) -> dic
     card = await db.credit_cards.find_one({"_id": oid})
     if not card:
         raise HTTPException(status_code=404, detail="card not found")
-    current = float(card.get("credit_limit", 0) or 0)
+    current = float(str(card.get("credit_limit") or 0))
     new_limit = current + float(body.delta_amount)
     await db.credit_cards.update_one({"_id": oid}, {"$set": {"credit_limit": new_limit}})
     log.info("credit_card.limit_increased", context={
@@ -174,10 +181,21 @@ Write-Utf8 $CcPath $cc
 Write-Host "  #4 applied to backend/routers/credit_cards.py" -ForegroundColor Green
 
 # ---- Mutation #5 - requirements.txt CVE dependency ------------------------
+# We previously pinned requests==2.20.0, but that version requires idna<2.8
+# while the FastAPI stack's anyio requires idna>=2.8 -- pip can't resolve.
+# requests==2.25.1 still ships with multiple CVEs flagged by pip-audit
+# (CVE-2023-32681, CVE-2024-35195, CVE-2024-47081) so the AQE vulnerability
+# scanner still has something interesting to find, and its idna constraint
+# (<3,>=2.5) is compatible with anyio so the docker image builds cleanly.
 $reqs = Read-Utf8 $ReqsPath
-if (-not ($reqs -match "(?m)^requests==2\.20\.0\b")) {
-    $reqs = $reqs.TrimEnd() + "`r`n# Added by demo push - known CVEs (CVE-2018-18074 et al.)`r`nrequests==2.20.0`r`n"
-}
+# Drop any prior (broken) pin so a stale workspace converges to the new version
+$reqs = $reqs -replace "(?m)^# Added by demo push - known CVEs.*\r?\n", ""
+$reqs = $reqs -replace "(?m)^# \(CVE-.*\r?\n", ""
+$reqs = $reqs -replace "(?m)^# Pinned to a version.*\r?\n", ""
+$reqs = $reqs -replace "(?m)^# is compatible.*\r?\n", ""
+$reqs = $reqs -replace "(?m)^requests==2\.20\.0\r?\n", ""
+$reqs = $reqs -replace "(?m)^requests==2\.25\.1\r?\n", ""
+$reqs = $reqs.TrimEnd() + "`r`n# Added by demo push - known CVEs flagged by pip-audit`r`n# (CVE-2023-32681, CVE-2024-35195, CVE-2024-47081). idna<3 is compatible`r`n# with anyio's idna>=2.8 so the api image still builds.`r`nrequests==2.25.1`r`n"
 Write-Utf8 $ReqsPath $reqs
 Write-Host "  #5 applied to backend/requirements.txt" -ForegroundColor Green
 
@@ -266,13 +284,41 @@ if ($LASTEXITCODE -ne 0) { Fail "git commit failed" }
 git push origin main
 if ($LASTEXITCODE -ne 0) { Fail "git push origin main failed" }
 
-# ---- Restart docker so the target picks up code changes -------------------
+# ---- Rebuild api image + restart so the target picks up backend code ------
+# `docker compose restart` does NOT rebuild a baked image. The api service is
+# built from ./backend (no bind mount), so a plain restart leaves the running
+# container on the old image and every new endpoint 404s. We must `up --build`
+# the api service. The ui service IS bind-mounted to ./frontend so a restart
+# is enough there.
 Write-Host ""
-Write-Host "Restarting docker services..." -ForegroundColor Yellow
-docker compose restart api ui
+Write-Host "Rebuilding api image + restarting services..." -ForegroundColor Yellow
+docker compose up -d --build api
 if ($LASTEXITCODE -ne 0) {
-    Write-Host "  (docker restart failed - services may not be running)" -ForegroundColor DarkYellow
+    Write-Host "  (docker compose up --build api failed - services may not be running)" -ForegroundColor DarkYellow
 }
+docker compose restart ui
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "  (docker compose restart ui failed)" -ForegroundColor DarkYellow
+}
+
+# ---- Wait until the new endpoint is actually live -------------------------
+# Without this we sometimes pushed to git, told the user "done", and triggered
+# AQE before the rebuilt container finished booting -> every limit-increase
+# test 404s and the demo story collapses.
+Write-Host "Waiting for api to expose /limit-increase..." -ForegroundColor Yellow
+$deadline = (Get-Date).AddSeconds(60)
+$ready = $false
+while ((Get-Date) -lt $deadline) {
+    try {
+        $r = Invoke-WebRequest -Uri "http://localhost:8000/openapi.json" -UseBasicParsing -TimeoutSec 3
+        if ($r.Content.Contains("/limit-increase")) { $ready = $true; break }
+    } catch {}
+    Start-Sleep -Seconds 2
+}
+if (-not $ready) {
+    Fail "api container did not expose /limit-increase within 60s - rebuild may have failed."
+}
+Write-Host "  api ready - /limit-increase endpoint is live." -ForegroundColor Green
 
 # ---- Summary --------------------------------------------------------------
 $newSha = "$(git rev-parse HEAD)".Trim()
