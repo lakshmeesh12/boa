@@ -6,8 +6,3 @@ pydantic==2.9.2
 python-dotenv==1.0.1
 faker==30.8.2
 python-multipart==0.0.12
-# Added by demo push - known CVEs flagged by pip-audit
-# (CVE-2023-32681 Proxy-Authorization leak, CVE-2024-35195 verify-bypass,
-# CVE-2024-47081 .netrc leak). Pinned to a version whose idna<3 constraint
-# is compatible with anyio's idna>=2.8 transitive requirement.
-requests==2.25.1
