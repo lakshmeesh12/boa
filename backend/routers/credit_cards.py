@@ -1,7 +1,6 @@
 """Credit card endpoints — list, view, block."""
 from __future__ import annotations
 
-import asyncio
 from datetime import datetime, timezone
 
 from bson import ObjectId
@@ -30,7 +29,6 @@ async def list_cards(
     status: str | None = Query(default=None),
 ) -> dict:
     db = get_async_db()
-    await asyncio.sleep(0.5)  # demo perf regression
     query: dict = {}
     if status:
         query["status"] = status.upper()
