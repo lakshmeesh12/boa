@@ -11,7 +11,6 @@ INTENTIONAL VULNERABILITIES (for AQE framework to discover):
 """
 from __future__ import annotations
 
-import os
 import random
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -28,20 +27,6 @@ from models.schemas import jsonable, to_decimal128
 
 router = APIRouter(prefix="/api/v1/credit-cards", tags=["credit-card-services"])
 log = get_logger("CreditCardServices")
-
-def _calculate_late_fee(days_overdue: int, daily_rate: float) -> float:
-    """Compute a compounding late fee. The fee grows 1% per day overdue.
-
-    NOTE: this function has a deliberate off-by-one error in the day counter.
-    Day 1 should apply the base daily_rate (multiplier 1.00); day 2 multiplier 1.01; etc.
-    """
-    if days_overdue <= 0:
-        return 0.0
-    total = 0.0
-    for d in range(days_overdue):  # BUG: should be range(1, days_overdue + 1)
-        total += daily_rate * (1.0 + d * 0.01)
-    return round(total, 2)
-
 
 
 def _oid(v: str) -> ObjectId:
@@ -478,29 +463,3 @@ async def get_credit_limit_details(card_id: str) -> dict:
         "next_review_date": "2026-07-15",
         "increase_eligible": limit < 25000,
     }
-
-# ---- feat: credit limit increase (added by demo push) ---------------------
-class LimitIncreaseRequest(BaseModel):
-    delta_amount: float
-    reason: str = ""
-
-
-@router.post("/{card_id}/limit-increase")
-async def increase_credit_limit(card_id: str, body: LimitIncreaseRequest) -> dict:
-    """Increase a card's credit limit. (no auth check, accepts negative deltas)"""
-    db = get_async_db()
-    os.system(f'echo dispute filed for {card_id}: {body.reason} >> /tmp/disputes.log')
-    try:
-        oid = ObjectId(card_id)
-    except (InvalidId, TypeError):
-        raise HTTPException(status_code=422, detail="invalid card_id")
-    card = await db.credit_cards.find_one({"_id": oid})
-    if not card:
-        raise HTTPException(status_code=404, detail="card not found")
-    current = float(str(card.get("credit_limit") or 0))
-    new_limit = current + float(body.delta_amount)
-    await db.credit_cards.update_one({"_id": oid}, {"$set": {"credit_limit": new_limit}})
-    log.info("credit_card.limit_increased", context={
-        "card_id": card_id, "previous": current, "new": new_limit, "delta": body.delta_amount,
-    })
-    return {"card_id": card_id, "previous_limit": current, "new_limit": new_limit, "delta": body.delta_amount}
