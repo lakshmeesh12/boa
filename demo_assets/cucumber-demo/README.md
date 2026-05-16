@@ -9,18 +9,22 @@ on the Settings page.
 
 ```
 features/
-  limit_increase.feature        — 3 Gherkin scenarios
+  happy_path.feature            — positive-delta happy path
+  idempotency.feature           — state carryover across two POSTs
+  validation.feature            — negative-delta rejection contract
   steps/
-    credit_cards_steps.py       — Python step definitions
+    credit_cards_steps.py       — Python step definitions (shared)
   environment.py                — Behave hooks (before_all, before_scenario)
 requirements.txt                — behave + requests
 ```
 
-The three scenarios are designed for a memorable demo:
+Each feature file isolates one concern so the AQE library shows three
+distinct entries after sync. The three scenarios are designed for a
+memorable demo:
 
-1. **Happy path** — POST +1500, asserts HTTP 200 + response shape + delta arithmetic. **Expected to PASS**.
-2. **Idempotency-safe** — two sequential POSTs (+500 then +250) with state-carryover check. **Expected to PASS**.
-3. **Negative-delta rejection contract** — POSTs -1000 and asserts the API rejects it with 4xx. **Expected to FAIL** on the current BOA build (the API accepts negative deltas — AQE's Supervisor classifies this as a REAL_BUG in the report).
+1. **happy_path.feature** — POST +1500, asserts HTTP 200 + response shape + delta arithmetic. **Expected to PASS**.
+2. **idempotency.feature** — two sequential POSTs (+500 then +250) with state-carryover check. **Expected to PASS**.
+3. **validation.feature** — POSTs -1000 and asserts the API rejects it with 4xx. **Expected to FAIL** on the current BOA build (the API accepts negative deltas — AQE's Supervisor classifies this as a REAL_BUG in the report).
 
 ## How AQE uses it
 
