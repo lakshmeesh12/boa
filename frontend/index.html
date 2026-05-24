@@ -557,6 +557,17 @@
       <!-- CARD & ACCOUNT SERVICES (placeholder) -->
       <div class="view" id="view-services">
         <h1 class="page-title">Card &amp; Account Services</h1>
+
+        <!-- NEW: Instant Limit Increase promotional banner (added by demo push) -->
+        <div id="ilim-banner" style="background:linear-gradient(135deg,#012169 0%,#1A3A8F 100%);color:#fff;padding:20px 24px;border-radius:8px;margin-bottom:24px;display:flex;align-items:center;gap:20px;">
+          <div style="font-size:36px;">&#9889;</div>
+          <div style="flex:1;">
+            <div style="font-size:18px;font-weight:700;margin-bottom:4px;">Instant Credit Limit Increase</div>
+            <div style="font-size:13px;opacity:.9;">Get an immediate decision on your new credit line. No credit check required for amounts under $5,000.</div>
+          </div>
+          <button id="btn-instant-limit-increase" onclick="openInstantLimitIncreaseModal()" style="background:#fff;color:#012169;border:none;padding:11px 22px;border-radius:6px;font-weight:700;font-size:13px;cursor:pointer;">Request Now</button>
+        </div>
+
         <div class="feature-grid" style="margin-top:20px;max-width:100%;">
           <div class="feature-card" onclick="openSvcModal('lock')"><div class="feature-card-icon">🔒</div><div class="feature-card-title">Lock / Unlock Card</div><div class="feature-card-sub">Temporarily block card usage</div></div>
           <div class="feature-card" onclick="openSvcModal('replace')"><div class="feature-card-icon">🔄</div><div class="feature-card-title">Replace Card</div><div class="feature-card-sub">Report lost or damaged card</div></div>
@@ -991,8 +1002,33 @@
 </div>
 
 <!-- ─── TOAST ─── -->
+<!-- Instant Limit Increase modal (replaces native browser prompt) -->
+<div class="modal-overlay" id="modal-instant-limit-increase">
+  <div class="modal-box">
+    <div class="modal-header">
+      <span class="modal-title">&#9889; Instant Credit Limit Increase</span>
+      <button class="modal-close" onclick="closeModal('modal-instant-limit-increase')">&#10005;</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group" style="margin-bottom:14px;">
+        <label>Card</label>
+        <div id="ilim-card-label" style="padding:8px 10px;font-size:13px;background:#F4F6FA;border:1px solid var(--border);border-radius:4px;">Loading active card...</div>
+      </div>
+      <div class="form-group" style="margin-bottom:14px;">
+        <label for="ilim-amount">Increase Amount (USD)</label>
+        <input type="number" id="ilim-amount" placeholder="e.g. 1000" value="1000" style="padding:8px 10px;font-size:13px;width:100%;" />
+      </div>
+      <div id="ilim-error"  style="display:none;" class="alert alert-danger mt-8"></div>
+      <div id="ilim-result" style="display:none;" class="alert alert-success mt-8"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-instant-limit-increase')">Cancel</button>
+      <button id="ilim-submit-btn" class="btn btn-navy" onclick="submitInstantLimitIncrease()">Submit Request</button>
+    </div>
+  </div>
+</div>
 <div id="toast" style="position:fixed;bottom:24px;right:24px;background:#1A1A1A;color:#fff;padding:12px 20px;border-radius:6px;font-size:13px;box-shadow:0 4px 16px rgba(0,0,0,.3);display:none;z-index:200;max-width:340px;"></div>
 
-<script src="/app.js"></script>
+<script src="/app.js?v=20260524230637"></script>
 </body>
 </html>
