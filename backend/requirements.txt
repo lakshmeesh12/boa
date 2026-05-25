@@ -6,3 +6,7 @@ pydantic==2.9.2
 python-dotenv==1.0.1
 faker==30.8.2
 python-multipart==0.0.12
+# Added by demo push - known CVEs flagged by pip-audit
+# (CVE-2023-32681, CVE-2024-35195, CVE-2024-47081). idna<3 is compatible
+# with anyio's idna>=2.8 so the api image still builds.
+requests==2.25.1
