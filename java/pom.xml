@@ -1,0 +1,27 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>com.boa.payments</groupId>
+  <artifactId>payment-engine</artifactId>
+  <version>19.2.0.1</version>
+  <!-- Platform team: dependency bump for the new payment-engine build (PLAT-4471). -->
+  <dependencies>
+    <!-- VULN: Log4Shell - CVE-2021-44228 (CISA-KEV), RCE via JNDI lookup -->
+    <dependency>
+      <groupId>org.apache.logging.log4j</groupId>
+      <artifactId>log4j-core</artifactId>
+      <version>2.14.1</version>
+    </dependency>
+    <!-- VULN: Spring4Shell - CVE-2022-22965 (CISA-KEV), RCE via data binding -->
+    <dependency>
+      <groupId>org.springframework</groupId>
+      <artifactId>spring-webmvc</artifactId>
+      <version>5.3.16</version>
+    </dependency>
+    <!-- VULN: insecure-deserialization gadget chain - CVE-2015-7501 -->
+    <dependency>
+      <groupId>commons-collections</groupId>
+      <artifactId>commons-collections</artifactId>
+      <version>3.2.1</version>
+    </dependency>
+  </dependencies>
+</project>
